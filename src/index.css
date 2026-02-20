@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-text-color: #000000;
+  --tg-theme-hint-color: #999999;
+  --tg-theme-link-color: #E91E63;
+  --tg-theme-button-color: #E91E63;
+  --tg-theme-button-text-color: #ffffff;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background-color: var(--tg-theme-bg-color, #ffffff);
+  color: var(--tg-theme-text-color, #000000);
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Force dark text in form inputs for Max WebView */
+input, select, textarea {
+  color: #111827 !important;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+/* Ensure placeholder text is visible */
+input::placeholder, textarea::placeholder {
+  color: #6b7280 !important;
+  opacity: 1 !important;
+}
+
+/* Force all paragraph and span text to be visible */
+p, span, label, h1, h2, h3, h4, h5, h6, a, button, div {
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
+}
+
+/* Hide scrollbar but keep functionality */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
