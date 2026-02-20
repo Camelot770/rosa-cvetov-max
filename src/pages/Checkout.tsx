@@ -4,7 +4,7 @@ import { MapPin, Clock, CreditCard, Gift, MessageSquare } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
-import { openLink, hapticSuccess } from '../utils/platform';
+import { hapticSuccess } from '../utils/platform';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -98,8 +98,9 @@ export default function Checkout() {
         const { data: payment } = await api.post('/payment/create', { orderId: order.id });
         if (payment.confirmationUrl) {
           clearCart();
-          openLink(payment.confirmationUrl);
-          navigate('/orders');
+          // Max WebView blocks openLink() after async calls (not a direct user gesture)
+          // Use window.location.href for reliable redirect to YuKassa payment page
+          window.location.href = payment.confirmationUrl;
           return;
         }
       } catch {
