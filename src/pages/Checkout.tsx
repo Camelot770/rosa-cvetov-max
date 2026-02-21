@@ -118,10 +118,11 @@ export default function Checkout() {
     }
   };
 
-  if (items.length === 0) {
-    navigate('/cart');
-    return null;
-  }
+  useEffect(() => {
+    if (items.length === 0) navigate('/cart');
+  }, [items.length, navigate]);
+
+  if (items.length === 0) return null;
 
   return (
     <div className="pb-4">
