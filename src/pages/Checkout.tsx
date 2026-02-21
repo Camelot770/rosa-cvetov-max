@@ -96,18 +96,17 @@ export default function Checkout() {
 
       const { data: order } = await api.post('/orders', orderData);
 
-      // Create payment
+      // Create payment and redirect immediately
       try {
         const { data: payment } = await api.post('/payment/create', {
           orderId: order.id,
           returnUrl: `${window.location.origin}/orders`,
         });
         if (payment.confirmationUrl) {
-          // Set paymentUrl BEFORE clearCart — otherwise the empty-cart useEffect
-          // navigates away before the payment screen can render.
+          // Save URL for fallback screen, then redirect immediately
           setPaymentUrl(payment.confirmationUrl);
           clearCart();
-          setSubmitting(false);
+          window.location.href = payment.confirmationUrl;
           return;
         }
       } catch (payErr) {
@@ -132,24 +131,23 @@ export default function Checkout() {
 
   if (items.length === 0 && !paymentUrl) return null;
 
-  // Payment redirect — navigate directly to payment URL
+  // Fallback: if redirect didn't fire (e.g. blocked by WebView), show manual button
   if (paymentUrl) {
-    // In Mini App WebView, window.location.href is the only reliable way
-    window.location.href = paymentUrl;
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
           <CreditCard size={36} className="text-green-600" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Переход к оплате...</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Заказ создан!</h2>
         <p className="text-gray-500 text-sm mb-8">
-          Если страница оплаты не открылась, нажмите кнопку ниже
+          Нажмите кнопку для перехода к оплате
         </p>
         <a
           href={paymentUrl}
+          onClick={() => { window.location.href = paymentUrl; }}
           className="w-full block bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform text-center"
         >
-          Перейти к оплате
+          Оплатить
         </a>
         <button
           onClick={() => navigate('/orders')}
