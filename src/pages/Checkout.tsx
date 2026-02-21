@@ -103,10 +103,10 @@ export default function Checkout() {
           returnUrl: `${window.location.origin}/orders`,
         });
         if (payment.confirmationUrl) {
-          clearCart();
-          // Max WebView blocks both window.location.href and openLink() after async calls.
-          // Save the URL and show a payment button the user can tap (direct user gesture).
+          // Set paymentUrl BEFORE clearCart — otherwise the empty-cart useEffect
+          // navigates away before the payment screen can render.
           setPaymentUrl(payment.confirmationUrl);
+          clearCart();
           setSubmitting(false);
           return;
         }
@@ -127,8 +127,8 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    if (items.length === 0) navigate('/cart');
-  }, [items.length, navigate]);
+    if (items.length === 0 && !paymentUrl) navigate('/cart');
+  }, [items.length, navigate, paymentUrl]);
 
   if (items.length === 0 && !paymentUrl) return null;
 
