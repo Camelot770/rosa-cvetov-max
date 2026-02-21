@@ -4,7 +4,7 @@ import { MapPin, Clock, CreditCard, Gift, MessageSquare } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
-import { hapticSuccess, openLink } from '../utils/platform';
+import { hapticSuccess } from '../utils/platform';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -134,23 +134,6 @@ export default function Checkout() {
 
   // Payment redirect screen — user taps button to go to payment
   if (paymentUrl) {
-    const goToPay = () => {
-      // Try multiple methods to open payment URL (Max WebView compatibility)
-      try {
-        const wa = (window as any).WebApp;
-        if (wa?.openExternalLink) {
-          wa.openExternalLink(paymentUrl);
-          return;
-        }
-        if (wa?.openLink) {
-          wa.openLink(paymentUrl);
-          return;
-        }
-      } catch {}
-      // Fallback: direct navigation (most reliable in any WebView)
-      window.location.href = paymentUrl;
-    };
-
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
@@ -160,12 +143,11 @@ export default function Checkout() {
         <p className="text-gray-500 text-sm mb-8">
           Нажмите кнопку ниже, чтобы перейти к оплате
         </p>
+        {/* Direct <a> link — most reliable way to open external URL from Mini App */}
         <a
           href={paymentUrl}
-          onClick={(e) => {
-            e.preventDefault();
-            goToPay();
-          }}
+          target="_blank"
+          rel="noopener noreferrer"
           className="w-full block bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform text-center"
         >
           Перейти к оплате

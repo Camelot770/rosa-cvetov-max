@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useUserStore } from './store/user';
 import { initWebApp } from './utils/platform';
@@ -16,10 +16,19 @@ import Nav from './components/layout/Nav';
 
 function App() {
   const fetchProfile = useUserStore((s) => s.fetchProfile);
+  const navigate = useNavigate();
 
   useEffect(() => {
     initWebApp();
     fetchProfile();
+
+    // Handle ?page= query param from Max bot open_app buttons
+    // (Max API only allows the exact registered base URL, so we pass route via ?page=)
+    const params = new URLSearchParams(window.location.search);
+    const page = params.get('page');
+    if (page) {
+      navigate(`/${page}`, { replace: true });
+    }
   }, []);
 
   return (
