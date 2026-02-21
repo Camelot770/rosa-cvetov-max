@@ -178,7 +178,7 @@ export default function Home() {
             <h2 className="text-lg font-bold text-gray-800">Хиты продаж</h2>
           </div>
           <button
-            onClick={() => navigate('/catalog?isHit=true')}
+            onClick={() => navigate('/catalog?filter=hit')}
             className="flex items-center gap-0.5 text-sm text-primary-dark font-medium"
           >
             Все <ChevronRight size={16} />
@@ -205,7 +205,7 @@ export default function Home() {
             <h2 className="text-lg font-bold text-gray-800">Новинки</h2>
           </div>
           <button
-            onClick={() => navigate('/catalog?isNew=true')}
+            onClick={() => navigate('/catalog?filter=new')}
             className="flex items-center gap-0.5 text-sm text-primary-dark font-medium"
           >
             Все <ChevronRight size={16} />
