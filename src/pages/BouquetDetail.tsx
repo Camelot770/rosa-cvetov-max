@@ -41,16 +41,19 @@ export default function BouquetDetail() {
   }, [id]);
 
   const toggleFav = async () => {
+    const wasFav = isFav;
+    setIsFav(!wasFav); // optimistic update
+    hapticLight();
     try {
-      if (isFav) {
+      if (wasFav) {
         await api.delete(`/favorites/${id}`);
-        setIsFav(false);
       } else {
         await api.post(`/favorites/${id}`);
-        setIsFav(true);
       }
-      hapticLight();
-    } catch {}
+    } catch (err) {
+      setIsFav(wasFav); // revert on error
+      console.error('Favorites error:', err);
+    }
   };
 
   const handleAddToCart = () => {
