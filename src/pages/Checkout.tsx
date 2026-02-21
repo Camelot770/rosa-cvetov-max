@@ -4,7 +4,7 @@ import { MapPin, Clock, CreditCard, Gift, MessageSquare } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
-import { hapticSuccess } from '../utils/platform';
+import { hapticSuccess, openLink } from '../utils/platform';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -22,6 +22,8 @@ export default function Checkout() {
   const [bonusUsed, setBonusUsed] = useState(0);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState('');
 
   const [settings, setSettings] = useState<Record<string, string>>({});
 
@@ -71,6 +73,7 @@ export default function Checkout() {
     }
 
     setSubmitting(true);
+    setPaymentError('');
     try {
       const orderData = {
         items: items.map((i) => ({
@@ -95,16 +98,21 @@ export default function Checkout() {
 
       // Create payment
       try {
-        const { data: payment } = await api.post('/payment/create', { orderId: order.id });
+        const { data: payment } = await api.post('/payment/create', {
+          orderId: order.id,
+          returnUrl: `${window.location.origin}/orders`,
+        });
         if (payment.confirmationUrl) {
           clearCart();
-          // Max WebView blocks openLink() after async calls (not a direct user gesture)
-          // Use window.location.href for reliable redirect to YuKassa payment page
-          window.location.href = payment.confirmationUrl;
+          // Max WebView blocks both window.location.href and openLink() after async calls.
+          // Save the URL and show a payment button the user can tap (direct user gesture).
+          setPaymentUrl(payment.confirmationUrl);
+          setSubmitting(false);
           return;
         }
-      } catch {
-        // Payment not configured — order still created
+      } catch (payErr) {
+        console.error('Payment creation error:', payErr);
+        setPaymentError('Не удалось создать платёж. Заказ создан, оплатите позже в разделе «Мои заказы».');
       }
 
       clearCart();
@@ -122,7 +130,34 @@ export default function Checkout() {
     if (items.length === 0) navigate('/cart');
   }, [items.length, navigate]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0 && !paymentUrl) return null;
+
+  // Payment redirect screen — user taps button (direct gesture → openLink works in Max WebView)
+  if (paymentUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
+          <CreditCard size={36} className="text-green-600" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Заказ создан!</h2>
+        <p className="text-gray-500 text-sm mb-8">
+          Нажмите кнопку ниже, чтобы перейти к оплате
+        </p>
+        <button
+          onClick={() => openLink(paymentUrl)}
+          className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform"
+        >
+          Перейти к оплате
+        </button>
+        <button
+          onClick={() => navigate('/orders')}
+          className="mt-3 text-sm text-gray-400 underline"
+        >
+          Оплатить позже
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-4">
@@ -322,6 +357,9 @@ export default function Checkout() {
 
           {validationError && (
             <p className="text-sm text-red-500 mt-2">{validationError}</p>
+          )}
+          {paymentError && (
+            <p className="text-sm text-orange-500 mt-2">{paymentError}</p>
           )}
 
           <button
