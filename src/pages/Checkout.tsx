@@ -132,22 +132,21 @@ export default function Checkout() {
 
   if (items.length === 0 && !paymentUrl) return null;
 
-  // Payment redirect screen — user taps button to go to payment
+  // Payment redirect — navigate directly to payment URL
   if (paymentUrl) {
+    // In Mini App WebView, window.location.href is the only reliable way
+    window.location.href = paymentUrl;
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
           <CreditCard size={36} className="text-green-600" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Заказ создан!</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Переход к оплате...</h2>
         <p className="text-gray-500 text-sm mb-8">
-          Нажмите кнопку ниже, чтобы перейти к оплате
+          Если страница оплаты не открылась, нажмите кнопку ниже
         </p>
-        {/* Direct <a> link — most reliable way to open external URL from Mini App */}
         <a
           href={paymentUrl}
-          target="_blank"
-          rel="noopener noreferrer"
           className="w-full block bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform text-center"
         >
           Перейти к оплате
