@@ -27,18 +27,49 @@ const statusConfig: Record<string, { label: string; icon: any; color: string }> 
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
+  const loadOrders = () => {
+    setLoading(true);
+    setError('');
     api.get('/orders').then(({ data }) => {
       setOrders(data);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err) => {
+      console.error('Failed to load orders:', err?.response?.status, err?.response?.data);
+      setError(
+        err?.response?.status === 401
+          ? 'Ошибка авторизации. Попробуйте перезапустить приложение.'
+          : 'Не удалось загрузить заказы'
+      );
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => {
+    loadOrders();
   }, []);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] px-4">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h2 className="text-xl font-bold text-gray-800">Ошибка</h2>
+        <p className="text-gray-700 mt-2 text-center font-medium">{error}</p>
+        <button
+          onClick={loadOrders}
+          className="mt-4 px-6 py-2 bg-primary text-white rounded-xl font-bold"
+        >
+          Попробовать снова
+        </button>
       </div>
     );
   }
