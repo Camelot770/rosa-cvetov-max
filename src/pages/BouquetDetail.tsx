@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Heart, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../api/client';
 import { imageUrl } from '../utils/image';
 import { useCartStore } from '../store/cart';
@@ -103,15 +103,15 @@ export default function BouquetDetail() {
         {/* Back button */}
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 w-10 h-10 bg-white/80 backdrop-blur rounded-full flex items-center justify-center"
+          className="absolute top-3 left-3 z-20 w-10 h-10 bg-white shadow-md rounded-full flex items-center justify-center active:scale-95 transition-transform"
         >
-          <ChevronLeft size={20} />
+          <ArrowLeft size={20} className="text-gray-800" />
         </button>
 
         {/* Favorite button */}
         <button
           onClick={toggleFav}
-          className="absolute top-4 right-4 w-10 h-10 bg-white/80 backdrop-blur rounded-full flex items-center justify-center"
+          className="absolute top-3 right-3 z-20 w-10 h-10 bg-white shadow-md rounded-full flex items-center justify-center active:scale-95 transition-transform"
         >
           <Heart size={20} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-600'} />
         </button>
