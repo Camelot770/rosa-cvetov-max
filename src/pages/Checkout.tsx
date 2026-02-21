@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Clock, CreditCard, Gift, MessageSquare } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
-import { hapticSuccess } from '../utils/platform';
+import { hapticSuccess, openLink } from '../utils/platform';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ export default function Checkout() {
   const [bonusUsed, setBonusUsed] = useState(0);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const orderSubmitted = useRef(false);
   const [paymentError, setPaymentError] = useState('');
 
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -96,17 +96,17 @@ export default function Checkout() {
 
       const { data: order } = await api.post('/orders', orderData);
 
-      // Create payment and redirect immediately
+      // Create payment — same approach as working Telegram client
       try {
         const { data: payment } = await api.post('/payment/create', {
           orderId: order.id,
           returnUrl: `${window.location.origin}/orders`,
         });
         if (payment.confirmationUrl) {
-          // Save URL for fallback screen, then redirect immediately
-          setPaymentUrl(payment.confirmationUrl);
+          orderSubmitted.current = true;
           clearCart();
-          window.location.href = payment.confirmationUrl;
+          openLink(payment.confirmationUrl);
+          navigate('/orders');
           return;
         }
       } catch (payErr) {
@@ -114,6 +114,7 @@ export default function Checkout() {
         setPaymentError('Не удалось создать платёж. Заказ создан, оплатите позже в разделе «Мои заказы».');
       }
 
+      orderSubmitted.current = true;
       clearCart();
       hapticSuccess();
       navigate('/orders');
@@ -126,38 +127,10 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    if (items.length === 0 && !paymentUrl) navigate('/cart');
-  }, [items.length, navigate, paymentUrl]);
+    if (items.length === 0 && !orderSubmitted.current) navigate('/cart');
+  }, [items.length, navigate]);
 
-  if (items.length === 0 && !paymentUrl) return null;
-
-  // Fallback: if redirect didn't fire (e.g. blocked by WebView), show manual button
-  if (paymentUrl) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
-          <CreditCard size={36} className="text-green-600" />
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Заказ создан!</h2>
-        <p className="text-gray-500 text-sm mb-8">
-          Нажмите кнопку для перехода к оплате
-        </p>
-        <a
-          href={paymentUrl}
-          onClick={() => { window.location.href = paymentUrl; }}
-          className="w-full block bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform text-center"
-        >
-          Оплатить
-        </a>
-        <button
-          onClick={() => navigate('/orders')}
-          className="mt-3 text-sm text-gray-400 underline"
-        >
-          Оплатить позже
-        </button>
-      </div>
-    );
-  }
+  if (items.length === 0 && !orderSubmitted.current) return null;
 
   return (
     <div className="pb-4">
