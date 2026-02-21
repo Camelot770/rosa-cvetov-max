@@ -114,15 +114,28 @@ export default function Catalog() {
 
   const toggleFavorite = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
+    const wasFav = favorites.has(id);
+    // Optimistic update
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      wasFav ? next.delete(id) : next.add(id);
+      return next;
+    });
     try {
-      if (favorites.has(id)) {
+      if (wasFav) {
         await api.delete(`/favorites/${id}`);
-        setFavorites((prev) => { const next = new Set(prev); next.delete(id); return next; });
       } else {
         await api.post(`/favorites/${id}`);
-        setFavorites((prev) => { const next = new Set(prev); next.add(id); return next; });
       }
-    } catch {}
+    } catch (err) {
+      // Revert on error
+      setFavorites((prev) => {
+        const next = new Set(prev);
+        wasFav ? next.add(id) : next.delete(id);
+        return next;
+      });
+      console.error('Favorites error:', err);
+    }
   };
 
   const handleSearch = (value: string) => {
