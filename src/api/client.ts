@@ -11,9 +11,13 @@ const api = axios.create({
 
 // Add Max init data to every request
 api.interceptors.request.use((config) => {
+  // Try Max WebApp (via bridge.js)
   const max = (window as any).WebApp;
   if (max?.initData) {
     config.headers['X-Max-Init-Data'] = max.initData;
+  } else {
+    // Debug: log what's available
+    console.warn('[Max Auth] WebApp.initData is empty. WebApp object:', !!max, 'initData:', max?.initData);
   }
   return config;
 });
