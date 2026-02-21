@@ -132,8 +132,25 @@ export default function Checkout() {
 
   if (items.length === 0 && !paymentUrl) return null;
 
-  // Payment redirect screen — user taps button (direct gesture → openLink works in Max WebView)
+  // Payment redirect screen — user taps button to go to payment
   if (paymentUrl) {
+    const goToPay = () => {
+      // Try multiple methods to open payment URL (Max WebView compatibility)
+      try {
+        const wa = (window as any).WebApp;
+        if (wa?.openExternalLink) {
+          wa.openExternalLink(paymentUrl);
+          return;
+        }
+        if (wa?.openLink) {
+          wa.openLink(paymentUrl);
+          return;
+        }
+      } catch {}
+      // Fallback: direct navigation (most reliable in any WebView)
+      window.location.href = paymentUrl;
+    };
+
     return (
       <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6">
@@ -143,12 +160,16 @@ export default function Checkout() {
         <p className="text-gray-500 text-sm mb-8">
           Нажмите кнопку ниже, чтобы перейти к оплате
         </p>
-        <button
-          onClick={() => openLink(paymentUrl)}
-          className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform"
+        <a
+          href={paymentUrl}
+          onClick={(e) => {
+            e.preventDefault();
+            goToPay();
+          }}
+          className="w-full block bg-primary text-white py-4 rounded-xl font-bold text-lg active:scale-[0.98] transition-transform text-center"
         >
           Перейти к оплате
-        </button>
+        </a>
         <button
           onClick={() => navigate('/orders')}
           className="mt-3 text-sm text-gray-400 underline"
