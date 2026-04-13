@@ -40,6 +40,7 @@ export default function Home() {
   const [newArrivals, setNewArrivals] = useState<Bouquet[]>([]);
   const [loadingHits, setLoadingHits] = useState(true);
   const [loadingNew, setLoadingNew] = useState(true);
+  const [settings, setSettings] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api
@@ -53,6 +54,11 @@ export default function Home() {
       .then((res) => setNewArrivals(res.data))
       .catch(() => {})
       .finally(() => setLoadingNew(false));
+
+    api
+      .get('/settings')
+      .then((res) => setSettings(res.data))
+      .catch(() => {});
   }, []);
 
   const formatPrice = (price: number) =>
@@ -126,21 +132,21 @@ export default function Home() {
         <div className="absolute top-4 right-4 opacity-20">
           <Flower2 size={80} />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">Роза цветов</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{settings.hero_title || 'Роза цветов'}</h1>
         <p className="text-pink-100 text-sm mt-1 font-medium">
-          Студия стабилизированной флористики
+          {settings.hero_subtitle || 'Студия стабилизированной флористики'}
         </p>
         <p className="text-white/80 text-xs mt-3 leading-relaxed max-w-[260px]">
-          Живые цветы, которые не вянут. Букеты, которые остаются надолго — с доставкой по городу.
+          {settings.hero_description || 'Живые цветы, которые не вянут. Букеты, которые остаются надолго — с доставкой по городу.'}
         </p>
         <div className="flex items-center gap-4 mt-5">
           <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5">
             <Truck size={14} />
-            <span className="text-xs font-medium">Доставка 1-3 ч</span>
+            <span className="text-xs font-medium">{settings.hero_delivery_text || 'Доставка 1-3 ч'}</span>
           </div>
           <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5">
             <Clock size={14} />
-            <span className="text-xs font-medium">09:00 - 21:00</span>
+            <span className="text-xs font-medium">{settings.work_hours || '09:00 - 21:00'}</span>
           </div>
         </div>
       </div>
