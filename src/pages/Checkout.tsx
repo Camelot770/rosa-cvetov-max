@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, CreditCard, Gift, MessageSquare } from 'lucide-react';
+import { MapPin, Clock, CreditCard, Gift, MessageSquare, Tag } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
@@ -24,6 +24,9 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const orderSubmitted = useRef(false);
   const [paymentError, setPaymentError] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [promoApplied, setPromoApplied] = useState('');
+  const [promoError, setPromoError] = useState('');
 
   const [settings, setSettings] = useState<Record<string, string>>({});
 
@@ -41,8 +44,31 @@ export default function Checkout() {
 
   const subtotal = totalPrice();
   const deliveryCost = deliveryType === 'delivery' && subtotal < freeFrom ? deliveryPrice : 0;
-  const maxBonus = Math.min(user?.bonusPoints || 0, Math.floor(subtotal * maxBonusPercent / 100));
-  const finalPrice = subtotal + deliveryCost - bonusUsed;
+  const promoDiscount = promoApplied === 'VISITKA10' ? Math.floor(subtotal * 0.1) : 0;
+  const subtotalAfterPromo = subtotal - promoDiscount;
+  const maxBonus = Math.min(user?.bonusPoints || 0, Math.floor(subtotalAfterPromo * maxBonusPercent / 100));
+  const finalPrice = subtotalAfterPromo + deliveryCost - bonusUsed;
+
+  const applyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    setPromoError('');
+    if (!code) return;
+    if (code === 'VISITKA10') {
+      setPromoApplied(code);
+      // Reset bonus if it exceeds new max
+      const newMax = Math.floor((subtotal - Math.floor(subtotal * 0.1)) * maxBonusPercent / 100);
+      if (bonusUsed > newMax) setBonusUsed(newMax);
+    } else {
+      setPromoError('Промокод не найден');
+      setPromoApplied('');
+    }
+  };
+
+  const removePromo = () => {
+    setPromoApplied('');
+    setPromoInput('');
+    setPromoError('');
+  };
 
   const timeSlots = [
     '9:00–12:00', '12:00–15:00', '15:00–18:00', '18:00–21:00',
@@ -92,6 +118,7 @@ export default function Checkout() {
         bonusUsed,
         isAnonymous,
         cardText,
+        promoCode: promoApplied || undefined,
       };
 
       const { data: order } = await api.post('/orders', orderData);
@@ -279,6 +306,52 @@ export default function Checkout() {
           />
         </div>
 
+        {/* Promo code */}
+        <div className="bg-white rounded-xl p-4 shadow-sm">
+          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
+            <Tag size={18} className="text-primary" />
+            Промокод
+          </h3>
+          {promoApplied ? (
+            <div className="flex items-center justify-between bg-green-50 rounded-xl px-3 py-2.5">
+              <div>
+                <p className="text-sm font-bold text-green-700">{promoApplied}</p>
+                <p className="text-xs font-medium text-green-600">Скидка 10% применена</p>
+              </div>
+              <button
+                onClick={removePromo}
+                className="text-sm text-red-500 font-semibold"
+              >
+                Удалить
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Введите промокод"
+                  value={promoInput}
+                  onChange={(e) => {
+                    setPromoInput(e.target.value);
+                    if (promoError) setPromoError('');
+                  }}
+                  className="flex-1 border rounded-xl px-3 py-2.5 text-sm text-gray-900 font-medium uppercase"
+                />
+                <button
+                  onClick={applyPromo}
+                  className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold active:scale-95 transition-transform"
+                >
+                  Применить
+                </button>
+              </div>
+              {promoError && (
+                <p className="text-xs font-medium text-red-500 mt-2">{promoError}</p>
+              )}
+            </>
+          )}
+        </div>
+
         {/* Bonus */}
         {user && user.bonusPoints > 0 && (
           <div className="bg-white rounded-xl p-4 shadow-sm">
@@ -310,6 +383,12 @@ export default function Checkout() {
               <span className="text-gray-700 font-medium">Товары</span>
               <span className="font-semibold text-gray-900">{subtotal} ₽</span>
             </div>
+            {promoDiscount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Промокод {promoApplied}</span>
+                <span>−{promoDiscount} ₽</span>
+              </div>
+            )}
             {deliveryCost > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-700 font-medium">Доставка</span>
