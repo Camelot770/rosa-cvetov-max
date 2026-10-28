@@ -13,6 +13,7 @@ import Favorites from './pages/Favorites';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Nav from './components/layout/Nav';
+import ScrollProgress from './components/layout/ScrollProgress';
 
 function App() {
   const fetchProfile = useUserStore((s) => s.fetchProfile);
@@ -32,7 +33,8 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen pb-20 bg-gray-50">
+    <div className="min-h-screen pb-24 bg-paper text-ink">
+      <ScrollProgress />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/catalog" element={<Catalog />} />
