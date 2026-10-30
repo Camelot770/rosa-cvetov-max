@@ -5,6 +5,57 @@ import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
 import { openLink, hapticSuccess } from '../utils/platform';
 
+// IMPORTANT: these helpers live OUTSIDE the Checkout component on
+// purpose. React treats "a function declared inside render" as a brand
+// new component type on every render, so wrapping <input> inside such a
+// component unmounts the field (and the mobile keyboard) on every
+// keystroke. Hoisting Section to module scope keeps the input stable.
+function Section({
+  num,
+  title,
+  children,
+}: {
+  num: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="pt-6 pb-2">
+      <div className="flex items-baseline gap-3 mb-3">
+        <span className="caps flex-shrink-0" style={{ color: 'var(--vermilion)' }}>
+          — {num}
+        </span>
+        <h3 className="disp" style={{ fontSize: 22 }}>
+          {title}
+        </h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const inpBase: React.CSSProperties = {
+  background: 'var(--paper-2)',
+  border: '1px solid var(--ink-line)',
+  fontFamily: 'var(--body)',
+  fontSize: 14,
+  color: 'var(--ink)',
+  outline: 'none',
+  width: '100%',
+  padding: '12px 14px',
+};
+const chipBase = (active: boolean): React.CSSProperties => ({
+  background: active ? 'var(--ink)' : 'transparent',
+  color: active ? 'var(--paper)' : 'var(--ink)',
+  border: `1px solid ${active ? 'var(--ink)' : 'var(--ink-line)'}`,
+  fontFamily: 'var(--mono)',
+  fontSize: 10,
+  letterSpacing: '0.2em',
+  textTransform: 'uppercase',
+  padding: '10px 14px',
+  textAlign: 'center',
+});
+
 export default function Checkout() {
   const navigate = useNavigate();
   const { items, totalPrice, clearCart } = useCartStore();
@@ -97,29 +148,6 @@ export default function Checkout() {
     if (items.length === 0 && !orderSubmitted.current) navigate('/cart');
   }, [items.length, navigate]);
   if (items.length === 0 && !orderSubmitted.current) return null;
-
-  const Section = ({ num, title, children }: { num: string; title: string; children: React.ReactNode }) => (
-    <section className="pt-6 pb-2">
-      <div className="flex items-baseline gap-3 mb-3">
-        <span className="caps flex-shrink-0" style={{ color: 'var(--vermilion)' }}>— {num}</span>
-        <h3 className="disp" style={{ fontSize: 22 }}>{title}</h3>
-      </div>
-      {children}
-    </section>
-  );
-
-  const inpBase: React.CSSProperties = {
-    background: 'var(--paper-2)', border: '1px solid var(--ink-line)',
-    fontFamily: 'var(--body)', fontSize: 14, color: 'var(--ink)',
-    outline: 'none', width: '100%', padding: '12px 14px',
-  };
-  const chipBase = (active: boolean): React.CSSProperties => ({
-    background: active ? 'var(--ink)' : 'transparent',
-    color: active ? 'var(--paper)' : 'var(--ink)',
-    border: `1px solid ${active ? 'var(--ink)' : 'var(--ink-line)'}`,
-    fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.2em',
-    textTransform: 'uppercase', padding: '10px 14px', textAlign: 'center',
-  });
 
   return (
     <div className="pb-40">
