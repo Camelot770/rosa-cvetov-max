@@ -1,21 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingBag, ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Heart, ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import api from '../api/client';
 import { imageUrl } from '../utils/image';
 import { useCartStore } from '../store/cart';
 import { hapticLight, hapticSuccess } from '../utils/platform';
 
 interface Bouquet {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  oldPrice?: number;
-  category: string;
-  tags: string[];
-  isHit: boolean;
-  isNew: boolean;
+  id: number; name: string; description: string;
+  price: number; oldPrice?: number; category: string;
+  tags: string[]; isHit: boolean; isNew: boolean;
   images: { id: number; url: string }[];
 }
 
@@ -30,34 +24,31 @@ export default function BouquetDetail() {
   const [fullscreen, setFullscreen] = useState(false);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const touchRef = useRef<{ startX: number; startY: number; startDist: number; startScale: number; startTranslate: { x: number; y: number }; isSwiping: boolean }>({ startX: 0, startY: 0, startDist: 0, startScale: 1, startTranslate: { x: 0, y: 0 }, isSwiping: false });
-
+  const [added, setAdded] = useState(false);
+  const touchRef = useRef<{
+    startX: number; startY: number; startDist: number;
+    startScale: number; startTranslate: { x: number; y: number };
+    isSwiping: boolean;
+  }>({ startX: 0, startY: 0, startDist: 0, startScale: 1, startTranslate: { x: 0, y: 0 }, isSwiping: false });
 
   useEffect(() => {
-    api.get(`/bouquets/${id}`).then(({ data }) => {
-      setBouquet(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-
-    api.get('/favorites').then(({ data }) => {
-      if (data.some((f: any) => f.bouquetId === Number(id))) setIsFav(true);
-    }).catch(() => {});
+    api.get(`/bouquets/${id}`)
+      .then(({ data }) => { setBouquet(data); setLoading(false); })
+      .catch(() => setLoading(false));
+    api.get('/favorites')
+      .then(({ data }) => {
+        if (data.some((f: any) => f.bouquetId === Number(id))) setIsFav(true);
+      })
+      .catch(() => {});
   }, [id]);
 
   const toggleFav = async () => {
     const wasFav = isFav;
-    setIsFav(!wasFav); // optimistic update
+    setIsFav(!wasFav);
     hapticLight();
     try {
-      if (wasFav) {
-        await api.delete(`/favorites/${id}`);
-      } else {
-        await api.post(`/favorites/${id}`);
-      }
-    } catch (err) {
-      setIsFav(wasFav); // revert on error
-      console.error('Favorites error:', err);
-    }
+      wasFav ? await api.delete(`/favorites/${id}`) : await api.post(`/favorites/${id}`);
+    } catch { setIsFav(wasFav); }
   };
 
   const handleAddToCart = () => {
@@ -70,22 +61,34 @@ export default function BouquetDetail() {
       image: bouquet.images[0]?.url,
     });
     hapticSuccess();
+    setAdded(true);
+    setTimeout(() => setAdded(false), 1500);
   };
+
+  const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, ' ') + ' ₽';
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div
+          className="w-6 h-6 rounded-full animate-spin"
+          style={{ border: '2px solid var(--vermilion)', borderTopColor: 'transparent' }}
+        />
       </div>
     );
   }
 
   if (!bouquet) {
     return (
-      <div className="p-4 text-center mt-20">
-        <p className="text-gray-700 font-medium">Букет не найден</p>
-        <button onClick={() => navigate('/catalog')} className="mt-4 text-primary">
-          Вернуться в каталог
+      <div className="px-5 py-20 text-center">
+        <div className="caps mb-3" style={{ color: 'var(--taupe)' }}>✦ 404</div>
+        <h1 className="disp text-3xl">Букет не найден.</h1>
+        <button
+          onClick={() => navigate('/catalog')}
+          className="mt-6 caps underline underline-offset-4"
+          style={{ color: 'var(--vermilion)' }}
+        >
+          Вернуться в каталог →
         </button>
       </div>
     );
@@ -94,16 +97,10 @@ export default function BouquetDetail() {
   const images = bouquet.images.length > 0 ? bouquet.images : [{ id: 0, url: '' }];
 
   const openFullscreen = () => {
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-    setFullscreen(true);
-    hapticLight();
+    setScale(1); setTranslate({ x: 0, y: 0 }); setFullscreen(true); hapticLight();
   };
-
   const closeFullscreen = () => {
-    setFullscreen(false);
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
+    setFullscreen(false); setScale(1); setTranslate({ x: 0, y: 0 });
   };
 
   const getDistance = (t1: React.Touch, t2: React.Touch) =>
@@ -121,13 +118,12 @@ export default function BouquetDetail() {
       touchRef.current.isSwiping = scale <= 1;
     }
   };
-
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      const dist = getDistance(e.touches[0], e.touches[1]);
-      const newScale = Math.min(4, Math.max(1, touchRef.current.startScale * (dist / touchRef.current.startDist)));
-      setScale(newScale);
-      if (newScale <= 1) setTranslate({ x: 0, y: 0 });
+      const d = getDistance(e.touches[0], e.touches[1]);
+      const ns = Math.min(4, Math.max(1, touchRef.current.startScale * (d / touchRef.current.startDist)));
+      setScale(ns);
+      if (ns <= 1) setTranslate({ x: 0, y: 0 });
     } else if (e.touches.length === 1 && scale > 1) {
       const dx = e.touches[0].clientX - touchRef.current.startX;
       const dy = e.touches[0].clientY - touchRef.current.startY;
@@ -138,7 +134,6 @@ export default function BouquetDetail() {
       touchRef.current.isSwiping = false;
     }
   };
-
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (scale <= 1 && touchRef.current.isSwiping && e.changedTouches.length === 1) {
       const dx = e.changedTouches[0].clientX - touchRef.current.startX;
@@ -151,21 +146,26 @@ export default function BouquetDetail() {
   };
 
   return (
-    <div className="pb-4">
-      {/* Fullscreen image viewer */}
+    <div className="pb-32">
+      {/* Fullscreen viewer */}
       {fullscreen && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: '#000' }}
+        >
           <button
             onClick={closeFullscreen}
-            className="absolute top-4 right-4 z-50 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center"
+            className="absolute top-4 right-4 z-50 w-10 h-10 flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.1)' }}
           >
-            <X size={22} className="text-white" />
+            <X size={20} strokeWidth={1.5} color="white" />
           </button>
-
-          <div className="absolute top-5 left-0 right-0 text-center text-white/70 text-sm">
+          <div
+            className="absolute top-5 left-0 right-0 text-center"
+            style={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'var(--mono)', fontSize: 11, letterSpacing: '0.15em' }}
+          >
             {currentImage + 1} / {images.length}
           </div>
-
           <div
             className="flex-1 flex items-center justify-center overflow-hidden"
             onTouchStart={handleTouchStart}
@@ -180,14 +180,16 @@ export default function BouquetDetail() {
               draggable={false}
             />
           </div>
-
           {images.length > 1 && (
             <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2">
               {images.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => { setCurrentImage(i); setScale(1); setTranslate({ x: 0, y: 0 }); }}
-                  className={`w-2.5 h-2.5 rounded-full ${i === currentImage ? 'bg-white' : 'bg-white/40'}`}
+                  className="w-2 h-2"
+                  style={{
+                    background: i === currentImage ? 'white' : 'rgba(255,255,255,0.4)',
+                  }}
                 />
               ))}
             </div>
@@ -195,107 +197,172 @@ export default function BouquetDetail() {
         </div>
       )}
 
-      {/* Image gallery */}
-      <div className="relative aspect-square bg-pink-50">
+      {/* Head bar */}
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{ borderBottom: '1px solid var(--ink-line)' }}
+      >
+        <button
+          onClick={() => navigate(-1)}
+          className="w-9 h-9 flex items-center justify-center"
+          style={{ border: '1px solid var(--ink-line)' }}
+        >
+          <ArrowLeft size={16} strokeWidth={1.5} />
+        </button>
+        <div className="caps" style={{ color: 'var(--taupe)' }}>
+          Pl. · {String(bouquet.id).padStart(2, '0')}
+        </div>
+        <button
+          onClick={toggleFav}
+          className="w-9 h-9 flex items-center justify-center"
+          style={{ border: '1px solid var(--ink-line)' }}
+        >
+          <Heart
+            size={16}
+            strokeWidth={1.5}
+            fill={isFav ? 'var(--vermilion)' : 'none'}
+            style={{ color: isFav ? 'var(--vermilion)' : 'var(--ink)' }}
+          />
+        </button>
+      </div>
+
+      {/* Hero image 4:5 */}
+      <div className="relative img-slot" style={{ aspectRatio: '4 / 5' }}>
         {images[currentImage]?.url ? (
           <img
             src={imageUrl(images[currentImage].url)}
             alt={bouquet.name}
-            className="w-full h-full object-cover cursor-pointer"
+            className="w-full h-full object-cover"
             onClick={openFullscreen}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-6xl">🌹</div>
-        )}
+        ) : null}
 
-        {/* Back button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="absolute top-3 left-3 z-20 w-10 h-10 bg-white shadow-md rounded-full flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <ArrowLeft size={20} className="text-gray-800" />
-        </button>
+        {/* Chips */}
+        <div className="absolute top-3 left-3 flex gap-1.5">
+          {bouquet.isHit && (
+            <span
+              className="px-1.5 py-0.5"
+              style={{ background: 'var(--vermilion)', color: 'var(--paper)',
+                fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.2em' }}
+            >
+              HIT
+            </span>
+          )}
+          {bouquet.isNew && (
+            <span
+              className="px-1.5 py-0.5"
+              style={{ background: 'var(--ink)', color: 'var(--paper)',
+                fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.2em' }}
+            >
+              NEW
+            </span>
+          )}
+        </div>
 
-        {/* Favorite button */}
-        <button
-          onClick={toggleFav}
-          className="absolute top-3 right-3 z-20 w-10 h-10 bg-white shadow-md rounded-full flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <Heart size={20} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-600'} />
-        </button>
-
-        {/* Image dots */}
-        {images.length > 1 && (
-          <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setCurrentImage(i)}
-                className={`w-2 h-2 rounded-full ${i === currentImage ? 'bg-primary' : 'bg-white/60'}`}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Nav arrows */}
         {images.length > 1 && (
           <>
             <button
               onClick={() => setCurrentImage((p) => (p > 0 ? p - 1 : images.length - 1))}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/50 rounded-full flex items-center justify-center"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center"
+              style={{ background: 'var(--paper)', border: '1px solid var(--ink-line)' }}
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={14} strokeWidth={1.5} />
             </button>
             <button
               onClick={() => setCurrentImage((p) => (p < images.length - 1 ? p + 1 : 0))}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/50 rounded-full flex items-center justify-center"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center"
+              style={{ background: 'var(--paper)', border: '1px solid var(--ink-line)' }}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={14} strokeWidth={1.5} />
             </button>
+            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentImage(i)}
+                  className="w-1.5 h-1.5"
+                  style={{
+                    background: i === currentImage ? 'var(--vermilion)' : 'rgba(26,22,18,0.3)',
+                  }}
+                />
+              ))}
+            </div>
           </>
         )}
+      </div>
 
-        {/* Badges */}
-        <div className="absolute top-4 left-16 flex gap-2">
-          {bouquet.isHit && (
-            <span className="bg-orange-500 text-white text-xs px-2 py-0.5 rounded-full">Хит</span>
-          )}
-          {bouquet.isNew && (
-            <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">Новинка</span>
-          )}
-        </div>
+      {/* Caption line like in rosa-web */}
+      <div
+        className="px-4 py-3 flex items-baseline justify-between"
+        style={{ borderBottom: '1px solid var(--ink-line)',
+          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-soft)',
+          letterSpacing: '0.1em' }}
+      >
+        <span><strong style={{ color: 'var(--ink)' }}>Plate</strong> · «{bouquet.name}»</span>
+        <span><strong style={{ color: 'var(--ink)' }}>{fmt(bouquet.price)}</strong></span>
       </div>
 
       {/* Info */}
-      <div className="px-4 pt-4">
-        <h1 className="text-2xl font-bold">{bouquet.name}</h1>
+      <div className="px-5 pt-6">
+        <h1 className="disp" style={{ fontSize: 36 }}>«{bouquet.name}»</h1>
 
-        <div className="flex items-baseline gap-3 mt-2">
-          <span className="text-2xl font-bold text-primary">{bouquet.price} ₽</span>
-          {bouquet.oldPrice && (
-            <span className="text-lg text-gray-500 line-through">{bouquet.oldPrice} ₽</span>
+        <div className="flex items-baseline gap-3 mt-3">
+          <span className="font-mono text-xl" style={{ color: 'var(--ink)' }}>{fmt(bouquet.price)}</span>
+          {bouquet.oldPrice && bouquet.oldPrice > bouquet.price && (
+            <span className="font-mono text-sm line-through" style={{ color: 'var(--taupe)' }}>
+              {fmt(bouquet.oldPrice)}
+            </span>
           )}
         </div>
 
-        <p className="text-gray-800 font-medium mt-3 leading-relaxed">{bouquet.description}</p>
+        {bouquet.description && (
+          <>
+            <div className="rail my-5" />
+            <p
+              className="text-sm leading-relaxed whitespace-pre-wrap"
+              style={{ color: 'var(--ink-soft)' }}
+            >
+              {bouquet.description}
+            </p>
+          </>
+        )}
 
-        {bouquet.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
+        {bouquet.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-4">
             {bouquet.tags.map((tag) => (
-              <span key={tag} className="bg-pink-50 text-primary text-xs font-medium px-2.5 py-1 rounded-full">
+              <span
+                key={tag}
+                className="px-2 py-1 caps"
+                style={{ background: 'var(--paper-2)', color: 'var(--ink)',
+                  border: '1px solid var(--ink-line)' }}
+              >
                 #{tag}
               </span>
             ))}
           </div>
         )}
+      </div>
 
-        {/* Add to cart button */}
+      {/* Fixed CTA */}
+      <div
+        className="fixed left-0 right-0 bottom-16 px-5 py-4 z-40"
+        style={{
+          background: 'var(--paper)',
+          borderTop: '1px solid var(--ink-line)',
+          paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))',
+        }}
+      >
         <button
           onClick={handleAddToCart}
-          className="w-full mt-6 bg-primary text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+          className="w-full py-4 flex items-center justify-center gap-2"
+          style={{
+            background: added ? 'var(--ink)' : 'var(--vermilion)',
+            color: 'var(--paper)',
+            fontFamily: 'var(--mono)', fontSize: 11,
+            letterSpacing: '0.22em', textTransform: 'uppercase',
+          }}
         >
-          <ShoppingBag size={20} />
-          В корзину
+          {added ? '✓ Добавлено' : `В корзину · ${fmt(bouquet.price)}`}
         </button>
       </div>
     </div>

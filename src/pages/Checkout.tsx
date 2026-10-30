@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, CreditCard, Gift, MessageSquare, Tag } from 'lucide-react';
 import api from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useUserStore } from '../store/user';
-import { hapticSuccess, openLink } from '../utils/platform';
+import { openLink, hapticSuccess } from '../utils/platform';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -22,12 +21,8 @@ export default function Checkout() {
   const [bonusUsed, setBonusUsed] = useState(0);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState('');
   const orderSubmitted = useRef(false);
-  const [paymentError, setPaymentError] = useState('');
-  const [promoInput, setPromoInput] = useState('');
-  const [promoApplied, setPromoApplied] = useState('');
-  const [promoError, setPromoError] = useState('');
-
   const [settings, setSettings] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -38,96 +33,43 @@ export default function Checkout() {
     }
   }, [user]);
 
-  const deliveryPrice = parseInt(settings.delivery_price || '500');
-  const freeFrom = parseInt(settings.free_delivery_from || '5000');
+  const deliveryPrice   = parseInt(settings.delivery_price || '500');
+  const freeFrom        = parseInt(settings.free_delivery_from || '5000');
   const maxBonusPercent = parseInt(settings.max_bonus_discount || '20');
 
-  const subtotal = totalPrice();
+  const subtotal     = totalPrice();
   const deliveryCost = deliveryType === 'delivery' && subtotal < freeFrom ? deliveryPrice : 0;
-  const promoDiscount = promoApplied === 'VISITKA10' ? Math.floor(subtotal * 0.1) : 0;
-  const subtotalAfterPromo = subtotal - promoDiscount;
-  const maxBonus = Math.min(user?.bonusPoints || 0, Math.floor(subtotalAfterPromo * maxBonusPercent / 100));
-  const finalPrice = subtotalAfterPromo + deliveryCost - bonusUsed;
+  const maxBonus     = Math.min(user?.bonusPoints || 0, Math.floor(subtotal * maxBonusPercent / 100));
+  const finalPrice   = subtotal + deliveryCost - bonusUsed;
 
-  const applyPromo = () => {
-    const code = promoInput.trim().toUpperCase();
-    setPromoError('');
-    if (!code) return;
-    if (code === 'VISITKA10') {
-      setPromoApplied(code);
-      // Reset bonus if it exceeds new max
-      const newMax = Math.floor((subtotal - Math.floor(subtotal * 0.1)) * maxBonusPercent / 100);
-      if (bonusUsed > newMax) setBonusUsed(newMax);
-    } else {
-      setPromoError('Промокод не найден');
-      setPromoApplied('');
-    }
-  };
-
-  const removePromo = () => {
-    setPromoApplied('');
-    setPromoInput('');
-    setPromoError('');
-  };
-
-  const timeSlots = [
-    '9:00–12:00', '12:00–15:00', '15:00–18:00', '18:00–21:00',
-  ];
-
-  const [validationError, setValidationError] = useState('');
+  const timeSlots = ['9:00 — 12:00', '12:00 — 15:00', '15:00 — 18:00', '18:00 — 21:00'];
+  const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, ' ') + ' ₽';
 
   const handleSubmit = async () => {
     if (items.length === 0) return;
     setValidationError('');
 
-    // Validation
-    if (!recipientPhone.trim()) {
-      setValidationError('Укажите телефон получателя');
-      return;
-    }
-    if (!deliveryDate) {
-      setValidationError('Выберите дату доставки');
-      return;
-    }
-    if (!deliveryTime) {
-      setValidationError('Выберите время доставки');
-      return;
-    }
+    if (!recipientPhone.trim()) return setValidationError('Укажите телефон получателя');
+    if (!deliveryDate)          return setValidationError('Выберите дату доставки');
+    if (!deliveryTime)          return setValidationError('Выберите время доставки');
     if (deliveryType === 'delivery' && !selectedAddress && user?.addresses?.length) {
-      setValidationError('Выберите адрес доставки');
-      return;
+      return setValidationError('Выберите адрес доставки');
     }
 
     setSubmitting(true);
-    setPaymentError('');
     try {
       const orderData = {
         items: items.map((i) => ({
-          bouquetId: i.bouquetId || null,
-          name: i.name,
-          price: i.price,
-          quantity: i.quantity,
+          bouquetId: i.bouquetId || null, name: i.name, price: i.price, quantity: i.quantity,
         })),
         addressId: deliveryType === 'delivery' ? selectedAddress : null,
-        deliveryType,
-        deliveryDate,
-        deliveryTime,
-        recipientName,
-        recipientPhone,
-        comment,
-        bonusUsed,
-        isAnonymous,
-        cardText,
-        promoCode: promoApplied || undefined,
+        deliveryType, deliveryDate, deliveryTime, recipientName, recipientPhone,
+        comment, bonusUsed, isAnonymous, cardText,
       };
-
       const { data: order } = await api.post('/orders', orderData);
-
-      // Create payment — same approach as working Telegram client
       try {
         const { data: payment } = await api.post('/payment/create', {
-          orderId: order.id,
-          returnUrl: `${window.location.origin}/orders`,
+          orderId: order.id, returnUrl: `${window.location.origin}/orders`,
         });
         if (payment.confirmationUrl) {
           orderSubmitted.current = true;
@@ -136,18 +78,16 @@ export default function Checkout() {
           navigate('/orders');
           return;
         }
-      } catch (payErr) {
-        console.error('Payment creation error:', payErr);
-        setPaymentError('Не удалось создать платёж. Заказ создан, оплатите позже в разделе «Мои заказы».');
+      } catch {
+        // Payment недоступна — заказ всё равно создан
       }
-
       orderSubmitted.current = true;
       clearCart();
       hapticSuccess();
       navigate('/orders');
     } catch (error) {
       console.error('Order error:', error);
-      alert('Ошибка при создании заказа');
+      setValidationError('Ошибка при создании заказа. Попробуйте ещё раз.');
     } finally {
       setSubmitting(false);
     }
@@ -156,272 +96,209 @@ export default function Checkout() {
   useEffect(() => {
     if (items.length === 0 && !orderSubmitted.current) navigate('/cart');
   }, [items.length, navigate]);
-
   if (items.length === 0 && !orderSubmitted.current) return null;
 
+  const Section = ({ num, title, children }: { num: string; title: string; children: React.ReactNode }) => (
+    <section className="pt-6 pb-2">
+      <div className="flex items-baseline gap-3 mb-3">
+        <span className="caps flex-shrink-0" style={{ color: 'var(--vermilion)' }}>— {num}</span>
+        <h3 className="disp" style={{ fontSize: 22 }}>{title}</h3>
+      </div>
+      {children}
+    </section>
+  );
+
+  const inpBase: React.CSSProperties = {
+    background: 'var(--paper-2)', border: '1px solid var(--ink-line)',
+    fontFamily: 'var(--body)', fontSize: 14, color: 'var(--ink)',
+    outline: 'none', width: '100%', padding: '12px 14px',
+  };
+  const chipBase = (active: boolean): React.CSSProperties => ({
+    background: active ? 'var(--ink)' : 'transparent',
+    color: active ? 'var(--paper)' : 'var(--ink)',
+    border: `1px solid ${active ? 'var(--ink)' : 'var(--ink-line)'}`,
+    fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.2em',
+    textTransform: 'uppercase', padding: '10px 14px', textAlign: 'center',
+  });
+
   return (
-    <div className="pb-4">
-      <div className="px-4 py-4 bg-white border-b">
-        <h1 className="text-xl font-bold">Оформление заказа</h1>
+    <div className="pb-40">
+      {/* Head */}
+      <div className="px-5 pt-4 pb-5" style={{ borderBottom: '1px solid var(--ink-line)' }}>
+        <div className="caps mb-2" style={{ color: 'var(--vermilion)' }}>P.&nbsp;06 — Checkout</div>
+        <h1 className="disp text-4xl">Оформление <em>заказа.</em></h1>
       </div>
 
-      <div className="px-4 py-3 space-y-4">
-        {/* Delivery type */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <MapPin size={18} className="text-primary" />
-            Способ получения
-          </h3>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setDeliveryType('delivery')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-medium ${
-                deliveryType === 'delivery' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800 font-semibold'
-              }`}
-            >
+      <div className="px-5">
+        <Section num="01" title="Способ получения">
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setDeliveryType('delivery')} style={chipBase(deliveryType === 'delivery')}>
               Доставка
             </button>
-            <button
-              onClick={() => setDeliveryType('pickup')}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-medium ${
-                deliveryType === 'pickup' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800 font-semibold'
-              }`}
-            >
+            <button onClick={() => setDeliveryType('pickup')} style={chipBase(deliveryType === 'pickup')}>
               Самовывоз
             </button>
           </div>
-          {deliveryType === 'delivery' && (
-            <div className="mt-3">
-              {user?.addresses?.length ? (
-                <select
-                  value={selectedAddress || ''}
-                  onChange={(e) => setSelectedAddress(Number(e.target.value))}
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 font-medium"
-                >
-                  {user.addresses.map((a: any) => (
-                    <option key={a.id} value={a.id}>
-                      {a.title}: {a.street}, {a.house}{a.apartment ? `, кв. ${a.apartment}` : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm font-medium text-gray-700">
-                  Добавьте адрес в профиле или укажите в комментарии
-                </p>
-              )}
-              {subtotal < freeFrom && (
-                <p className="text-xs font-medium text-gray-600 mt-2">
-                  Доставка {deliveryPrice}₽ (бесплатно от {freeFrom}₽)
-                </p>
-              )}
-            </div>
-          )}
-          {deliveryType === 'pickup' && (
-            <p className="text-sm font-medium text-gray-800 mt-3">
-              📍 {settings.address || 'д. Званка, ул. Приозёрная, д. 58'}
+          {deliveryType === 'delivery' && user?.addresses?.length ? (
+            <select
+              value={selectedAddress || ''}
+              onChange={(e) => setSelectedAddress(Number(e.target.value))}
+              style={{ ...inpBase, marginTop: 12 }}
+            >
+              {user.addresses.map((a: any) => (
+                <option key={a.id} value={a.id}>
+                  {a.title}: {a.street}, {a.house}{a.apartment ? `, кв. ${a.apartment}` : ''}
+                </option>
+              ))}
+            </select>
+          ) : deliveryType === 'delivery' ? (
+            <p className="text-sm mt-3" style={{ color: 'var(--ink-soft)' }}>
+              Адрес уточним в комментарии или звонком.
+            </p>
+          ) : (
+            <p className="text-sm mt-3" style={{ color: 'var(--ink-soft)' }}>
+              📍 {settings.address || 'д. Званка, ул. Приозёрная, 58'}
             </p>
           )}
-        </div>
+          {deliveryType === 'delivery' && subtotal < freeFrom && (
+            <p className="caps mt-3" style={{ color: 'var(--taupe)' }}>
+              Доставка {fmt(deliveryPrice)} · бесплатно от {fmt(freeFrom)}
+            </p>
+          )}
+        </Section>
 
-        {/* Date & time */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <Clock size={18} className="text-primary" />
-            Дата и время
-          </h3>
+        <Section num="02" title="Дата и время">
           <input
             type="date"
             value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.target.value)}
             min={new Date().toISOString().split('T')[0]}
-            className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 mb-2"
+            onChange={(e) => setDeliveryDate(e.target.value)}
+            style={inpBase}
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 mt-3">
             {timeSlots.map((slot) => (
-              <button
-                key={slot}
-                onClick={() => setDeliveryTime(slot)}
-                className={`py-2 rounded-xl text-sm ${
-                  deliveryTime === slot ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800 font-semibold'
-                }`}
-              >
+              <button key={slot} onClick={() => setDeliveryTime(slot)} style={chipBase(deliveryTime === slot)}>
                 {slot}
               </button>
             ))}
           </div>
-        </div>
+        </Section>
 
-        {/* Recipient */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <Gift size={18} className="text-primary" />
-            Получатель
-          </h3>
+        <Section num="03" title="Получатель">
           <input
-            type="text"
-            placeholder="Имя получателя"
-            value={recipientName}
-            onChange={(e) => setRecipientName(e.target.value)}
-            className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 mb-2"
+            type="text" placeholder="Имя получателя"
+            value={recipientName} onChange={(e) => setRecipientName(e.target.value)}
+            style={inpBase}
           />
           <input
-            type="tel"
-            placeholder="Телефон получателя"
-            value={recipientPhone}
-            onChange={(e) => setRecipientPhone(e.target.value)}
-            className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 mb-2"
+            type="tel" placeholder="Телефон +7…"
+            value={recipientPhone} onChange={(e) => setRecipientPhone(e.target.value)}
+            style={{ ...inpBase, marginTop: 10 }}
           />
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+          <label className="flex items-center gap-2 text-sm mt-3" style={{ color: 'var(--ink)' }}>
             <input
               type="checkbox"
               checked={isAnonymous}
               onChange={(e) => setIsAnonymous(e.target.checked)}
-              className="accent-primary w-5 h-5"
+              style={{ accentColor: 'var(--vermilion)', width: 18, height: 18 }}
             />
             Анонимная доставка
           </label>
-        </div>
+        </Section>
 
-        {/* Card text */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <MessageSquare size={18} className="text-primary" />
-            Текст открытки
-          </h3>
+        <Section num="04" title="Открытка">
           <textarea
-            placeholder="Напишите текст для открытки (необязательно)"
-            value={cardText}
-            onChange={(e) => setCardText(e.target.value)}
-            className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 h-20 resize-none"
+            placeholder="Напишите пару слов — вложим в букет (необязательно)"
+            value={cardText} onChange={(e) => setCardText(e.target.value)}
+            style={{ ...inpBase, height: 80, resize: 'none' }}
           />
-        </div>
+        </Section>
 
-        {/* Comment */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
+        <Section num="05" title="Комментарий">
           <textarea
-            placeholder="Комментарий к заказу"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            className="w-full border rounded-xl px-3 py-2.5 text-sm text-gray-900 h-16 resize-none"
+            placeholder="Этаж, домофон, пожелания флористу…"
+            value={comment} onChange={(e) => setComment(e.target.value)}
+            style={{ ...inpBase, height: 70, resize: 'none' }}
           />
-        </div>
+        </Section>
 
-        {/* Promo code */}
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <Tag size={18} className="text-primary" />
-            Промокод
-          </h3>
-          {promoApplied ? (
-            <div className="flex items-center justify-between bg-green-50 rounded-xl px-3 py-2.5">
-              <div>
-                <p className="text-sm font-bold text-green-700">{promoApplied}</p>
-                <p className="text-xs font-medium text-green-600">Скидка 10% применена</p>
-              </div>
-              <button
-                onClick={removePromo}
-                className="text-sm text-red-500 font-semibold"
-              >
-                Удалить
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Введите промокод"
-                  value={promoInput}
-                  onChange={(e) => {
-                    setPromoInput(e.target.value);
-                    if (promoError) setPromoError('');
-                  }}
-                  className="flex-1 border rounded-xl px-3 py-2.5 text-sm text-gray-900 font-medium uppercase"
-                />
-                <button
-                  onClick={applyPromo}
-                  className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold active:scale-95 transition-transform"
-                >
-                  Применить
-                </button>
-              </div>
-              {promoError && (
-                <p className="text-xs font-medium text-red-500 mt-2">{promoError}</p>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Bonus */}
         {user && user.bonusPoints > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-              <CreditCard size={18} className="text-primary" />
-              Бонусы ({user.bonusPoints} баллов)
-            </h3>
+          <Section num="06" title={`Бонусы — ${user.bonusPoints} баллов`}>
             <div className="flex items-center gap-3">
               <input
-                type="range"
-                min={0}
-                max={maxBonus}
-                value={bonusUsed}
+                type="range" min={0} max={maxBonus} value={bonusUsed}
                 onChange={(e) => setBonusUsed(Number(e.target.value))}
-                className="flex-1 accent-primary"
+                className="flex-1"
+                style={{ accentColor: 'var(--vermilion)' }}
               />
-              <span className="font-bold text-primary w-16 text-right">−{bonusUsed}₽</span>
+              <span className="font-mono text-sm w-16 text-right" style={{ color: 'var(--vermilion)' }}>
+                −{fmt(bonusUsed)}
+              </span>
             </div>
-            <p className="text-xs font-medium text-gray-600 mt-1">
+            <p className="caps mt-2" style={{ color: 'var(--taupe)' }}>
               Максимум {maxBonusPercent}% от суммы заказа
             </p>
-          </div>
+          </Section>
         )}
 
         {/* Summary */}
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-700 font-medium">Товары</span>
-              <span className="font-semibold text-gray-900">{subtotal} ₽</span>
+        <Section num="07" title="Итого">
+          <div className="space-y-2 py-2">
+            <div className="flex justify-between text-sm">
+              <span style={{ color: 'var(--ink-soft)' }}>Товары</span>
+              <span className="font-mono">{fmt(subtotal)}</span>
             </div>
-            {promoDiscount > 0 && (
-              <div className="flex justify-between text-green-600">
-                <span>Промокод {promoApplied}</span>
-                <span>−{promoDiscount} ₽</span>
-              </div>
-            )}
             {deliveryCost > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-700 font-medium">Доставка</span>
-                <span className="font-semibold text-gray-900">{deliveryCost} ₽</span>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--ink-soft)' }}>Доставка</span>
+                <span className="font-mono">{fmt(deliveryCost)}</span>
               </div>
             )}
             {bonusUsed > 0 && (
-              <div className="flex justify-between text-green-600">
+              <div className="flex justify-between text-sm" style={{ color: 'var(--vermilion)' }}>
                 <span>Бонусы</span>
-                <span>−{bonusUsed} ₽</span>
+                <span className="font-mono">−{fmt(bonusUsed)}</span>
               </div>
             )}
-            <div className="border-t pt-2 flex justify-between text-lg font-bold">
-              <span>Итого</span>
-              <span className="text-primary">{finalPrice} ₽</span>
+            <div
+              className="pt-3 flex justify-between items-baseline"
+              style={{ borderTop: '1px solid var(--ink-line)' }}
+            >
+              <span className="caps" style={{ color: 'var(--ink)' }}>К оплате</span>
+              <span className="disp" style={{ fontSize: 26 }}>{fmt(finalPrice)}</span>
             </div>
           </div>
-
           {validationError && (
-            <p className="text-sm text-red-500 mt-2">{validationError}</p>
+            <p className="text-sm mt-3 px-3 py-2"
+              style={{ background: 'var(--vermilion)', color: 'var(--paper)' }}>
+              {validationError}
+            </p>
           )}
-          {paymentError && (
-            <p className="text-sm text-orange-500 mt-2">{paymentError}</p>
-          )}
+        </Section>
+      </div>
 
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="w-full mt-4 bg-primary text-white py-3.5 rounded-xl font-semibold active:scale-[0.98] transition-transform disabled:opacity-50"
-          >
-            {submitting ? 'Оформляем...' : 'Оплатить'}
-          </button>
-        </div>
+      {/* Fixed submit */}
+      <div
+        className="fixed left-0 right-0 bottom-16 px-5 py-4 z-40"
+        style={{
+          background: 'var(--paper)',
+          borderTop: '1px solid var(--ink-line)',
+          paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))',
+        }}
+      >
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="w-full py-4 flex items-center justify-center gap-2"
+          style={{
+            background: submitting ? 'var(--taupe)' : 'var(--vermilion)',
+            color: 'var(--paper)', fontFamily: 'var(--mono)', fontSize: 11,
+            letterSpacing: '0.22em', textTransform: 'uppercase',
+            opacity: submitting ? 0.6 : 1,
+          }}
+        >
+          {submitting ? 'Отправка…' : `Оплатить · ${fmt(finalPrice)}`}
+        </button>
       </div>
     </div>
   );
