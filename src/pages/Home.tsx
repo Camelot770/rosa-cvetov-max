@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Phone, MapPin, Clock } from 'lucide-react';
 import api from '../api/client';
+import { ErrorState } from '../components/ui';
+import { useSettings, DEFAULT_ADDRESS, DEFAULT_HOURS, DEFAULT_PHONE } from '../hooks/useSettings';
 import { imageUrl } from '../utils/image';
+import { fmt, phoneHref, phoneLabel } from '../utils/format';
 
 interface Bouquet {
   id: number;
   name: string;
   price: number;
-  oldPrice?: number;
+  oldPrice?: number | null;
   images: { url: string }[];
   isHit: boolean;
   isNew: boolean;
+  isFeatured?: boolean;
   category: string;
 }
 
@@ -20,60 +24,15 @@ const CATEGORIES = [
   { label: 'Хиты',          value: 'hit',        meta: 'Что берут чаще' },
   { label: 'Новинки',       value: 'new',        meta: 'Свежее в студии' },
   { label: 'до 2 000 ₽',    value: '0-2000',     meta: 'Для подарка «просто так»' },
-  { label: '2 000 — 4 000 ₽', value: '2000-4000', meta: 'Повод и настроение' },
-  { label: 'от 4 000 ₽',    value: '4000-99999', meta: 'Большие композиции' },
+  { label: '2 000 - 4 000 ₽', value: '2000-4000', meta: 'Повод и настроение' },
+  { label: '4 000 - 6 000 ₽', value: '4000-6000', meta: 'Большие композиции' },
+  { label: 'от 6 000 ₽',    value: '6000-99999', meta: 'Статусный подарок' },
 ];
 
-export default function Home() {
+// Outside Home on purpose: a component declared during render remounts on every state change
+function CoverCard({ b }: { b: Bouquet }) {
   const navigate = useNavigate();
-  const [hits, setHits] = useState<Bouquet[]>([]);
-  const [newArrivals, setNewArrivals] = useState<Bouquet[]>([]);
-  const [featured, setFeatured] = useState<Bouquet | null>(null);
-  const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [loadingHits, setLoadingHits] = useState(true);
-  const [loadingNew, setLoadingNew] = useState(true);
-
-  useEffect(() => {
-    api.get('/bouquets').then((res) => {
-      const list: Bouquet[] = res.data || [];
-      setTotalCount(list.length);
-
-      // 1) Явно выбранный в админке featured букет
-      // 2) fallback — самый дорогой
-      api.get('/bouquets', { params: { featured: true } })
-        .then((fRes) => {
-          const feat: Bouquet[] = fRes.data || [];
-          if (feat.length > 0) {
-            setFeatured(feat[0]);
-          } else {
-            const sorted = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
-            setFeatured(sorted[0] || null);
-          }
-        })
-        .catch(() => {
-          const sorted = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
-          setFeatured(sorted[0] || null);
-        });
-    }).catch(() => {});
-
-    api.get('/bouquets', { params: { isHit: true } })
-      .then((res) => setHits(res.data || []))
-      .catch(() => {})
-      .finally(() => setLoadingHits(false));
-
-    api.get('/bouquets', { params: { isNew: true } })
-      .then((res) => setNewArrivals(res.data || []))
-      .catch(() => {})
-      .finally(() => setLoadingNew(false));
-  }, []);
-
-  const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, ' ') + ' ₽';
-
-  const now = new Date();
-  const month = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][now.getMonth()];
-  const year = now.getFullYear();
-
-  const CoverCard = ({ b }: { b: Bouquet }) => (
+  return (
     <button
       onClick={() => navigate(`/bouquet/${b.id}`)}
       className="relative w-full text-left overflow-hidden border border-ink-line img-slot"
@@ -94,10 +53,12 @@ export default function Home() {
       </div>
     </button>
   );
+}
 
-  const MiniCard = ({ b }: { b: Bouquet }) => (
+function MiniCard({ b }: { b: Bouquet }) {
+  const navigate = useNavigate();
+  return (
     <button
-      key={b.id}
       onClick={() => navigate(`/bouquet/${b.id}`)}
       className="flex-shrink-0 w-40 text-left"
     >
@@ -130,21 +91,54 @@ export default function Home() {
         <div className="disp" style={{ fontSize: 22, marginTop: 2 }}>«{b.name}»</div>
         <div className="mt-1 flex items-baseline gap-2">
           <span className="font-mono text-sm" style={{ color: 'var(--ink)' }}>{fmt(b.price)}</span>
-          {b.oldPrice && b.oldPrice > b.price && (
+          {b.oldPrice != null && b.oldPrice > b.price && (
             <span className="font-mono text-xs line-through" style={{ color: 'var(--taupe)' }}>{fmt(b.oldPrice)}</span>
           )}
         </div>
       </div>
     </button>
   );
+}
 
-  const SkeletonMini = () => (
+function SkeletonMini() {
+  return (
     <div className="flex-shrink-0 w-40">
       <div className="w-full img-slot border border-ink-line" style={{ aspectRatio: '4 / 5' }} />
       <div className="h-3 bg-paper-2 mt-3 w-20" />
       <div className="h-5 bg-paper-2 mt-1 w-28" />
     </div>
   );
+}
+
+export default function Home() {
+  const navigate = useNavigate();
+  const settings = useSettings();
+  const [bouquets, setBouquets] = useState<Bouquet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    setFailed(false);
+    api.get('/bouquets')
+      .then(({ data }) => setBouquets(data || []))
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  const hits = bouquets.filter((b) => b.isHit);
+  const newArrivals = bouquets.filter((b) => b.isNew);
+  // The one picked in the admin panel, otherwise the most expensive
+  const featured = bouquets.find((b) => b.isFeatured)
+    || [...bouquets].sort((a, b) => (b.price || 0) - (a.price || 0))[0]
+    || null;
+  const phone = settings.phone || DEFAULT_PHONE;
+
+  const now = new Date();
+  const month = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][now.getMonth()];
+  const year = now.getFullYear();
 
   return (
     <div className="pb-6">
@@ -160,7 +154,7 @@ export default function Home() {
           <em style={{ color: 'var(--vermilion)', fontStyle: 'italic' }}>Роза</em>&nbsp;Цветов
         </div>
         <div className="caps mt-1" style={{ color: 'var(--taupe)' }}>
-          Стабилизированная флористика · {totalCount ?? '—'} букетов
+          Стабилизированная флористика · {loading || failed ? '—' : bouquets.length} букетов
         </div>
       </div>
 
@@ -179,6 +173,7 @@ export default function Home() {
           растительными соками. Сохраняют форму, цвет и мягкость — до пяти лет
           без воды и ухода.
         </p>
+        {failed && <ErrorState title="Витрина не загрузилась." onRetry={load} />}
         {featured && (
           <div className="mt-5">
             <CoverCard b={featured} />
@@ -249,7 +244,7 @@ export default function Home() {
       <div className="rail mx-5 my-8" />
 
       {/* Hits */}
-      {(loadingHits || hits.length > 0) && (
+      {(loading || hits.length > 0) && (
         <section>
           <div className="px-5 flex items-baseline justify-between mb-3">
             <div>
@@ -265,14 +260,14 @@ export default function Home() {
             </button>
           </div>
           <div className="flex gap-4 overflow-x-auto px-5 pb-2 scrollbar-hide">
-            {loadingHits
+            {loading
               ? Array.from({ length: 4 }).map((_, i) => <SkeletonMini key={i} />)
               : hits.map((b) => <MiniCard key={b.id} b={b} />)}
           </div>
         </section>
       )}
 
-      {(loadingNew || newArrivals.length > 0) && (
+      {(loading || newArrivals.length > 0) && (
         <section className="mt-8">
           <div className="px-5 flex items-baseline justify-between mb-3">
             <div>
@@ -288,7 +283,7 @@ export default function Home() {
             </button>
           </div>
           <div className="flex gap-4 overflow-x-auto px-5 pb-2 scrollbar-hide">
-            {loadingNew
+            {loading
               ? Array.from({ length: 4 }).map((_, i) => <SkeletonMini key={i} />)
               : newArrivals.map((b) => <MiniCard key={b.id} b={b} />)}
           </div>
@@ -303,13 +298,13 @@ export default function Home() {
         <h2 className="disp text-3xl mb-4">Студия <em>рядом.</em></h2>
         <div className="space-y-3">
           <a
-            href="tel:+79600483996"
+            href={phoneHref(phone)}
             className="flex items-center gap-3 py-3 border-b"
             style={{ borderColor: 'var(--ink-line)' }}
           >
             <Phone size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} />
             <div className="flex-1">
-              <div className="font-mono text-sm">+7 960 048-39-96</div>
+              <div className="font-mono text-sm">{phoneLabel(phone)}</div>
               <div className="caps mt-1" style={{ color: 'var(--taupe)' }}>Звоните и заказывайте</div>
             </div>
           </a>
@@ -319,14 +314,14 @@ export default function Home() {
           >
             <MapPin size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} />
             <div className="flex-1">
-              <div className="text-sm">д. Званка, ул. Приозёрная, 58</div>
+              <div className="text-sm">{settings.address || DEFAULT_ADDRESS}</div>
               <div className="caps mt-1" style={{ color: 'var(--taupe)' }}>Казань · Татарстан</div>
             </div>
           </div>
           <div className="flex items-center gap-3 py-3">
             <Clock size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} />
             <div className="flex-1">
-              <div className="text-sm">Ежедневно · 09:00 – 21:00</div>
+              <div className="text-sm">Ежедневно · {settings.work_hours || DEFAULT_HOURS}</div>
               <div className="caps mt-1" style={{ color: 'var(--taupe)' }}>Без выходных</div>
             </div>
           </div>

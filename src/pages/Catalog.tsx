@@ -2,12 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Heart, Search } from 'lucide-react';
 import api from '../api/client';
+import { ErrorState } from '../components/ui';
 import { imageUrl } from '../utils/image';
+import { fmt } from '../utils/format';
 
 interface BouquetImage { url: string; }
 interface Bouquet {
-  id: number; name: string; price: number; oldPrice?: number;
-  images: BouquetImage[]; isHit: boolean; isNew: boolean; category: string;
+  id: number; name: string; price: number; oldPrice?: number | null;
+  images: BouquetImage[]; isHit: boolean; isNew: boolean; category: string; customOrder?: boolean;
 }
 
 const FILTERS = [
@@ -15,8 +17,8 @@ const FILTERS = [
   { value: 'new',        label: 'Новое' },
   { value: 'hit',        label: 'Хиты' },
   { value: '0-2000',     label: 'до 2 000' },
-  { value: '2000-4000',  label: '2 — 4 т' },
-  { value: '4000-6000',  label: '4 — 6 т' },
+  { value: '2000-4000',  label: '2 - 4 т' },
+  { value: '4000-6000',  label: '4 - 6 т' },
   { value: '6000-99999', label: 'от 6 т' },
 ];
 
@@ -33,12 +35,15 @@ export default function Catalog() {
 
   const [bouquets, setBouquets] = useState<Bouquet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState(searchParams.get('filter') || '');
   const [sort, setSort] = useState('');
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  // An answer to an older filter or search must not replace a newer one
+  const latestRequest = useRef(0);
 
   useEffect(() => {
     api.get('/favorites')
@@ -61,22 +66,30 @@ export default function Catalog() {
   }, [activeFilter, debouncedSearch, sort]);
 
   const fetchBouquets = async () => {
+    const request = ++latestRequest.current;
     setLoading(true);
+    setFailed(false);
     const params: any = {};
     if (activeFilter === 'new') params.isNew = true;
     else if (activeFilter === 'hit') params.isHit = true;
     else if (activeFilter.includes('-')) {
       const [min, max] = activeFilter.split('-').map(Number);
-      params.minPrice = min; params.maxPrice = max;
+      params.priceMin = min; params.priceMax = max;
     }
     if (debouncedSearch) params.search = debouncedSearch;
     if (sort) params.sort = sort;
 
     try {
       const { data } = await api.get('/bouquets', { params });
+      if (request !== latestRequest.current) return;
       setBouquets(data || []);
-    } catch (e) { setBouquets([]); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (request !== latestRequest.current) return;
+      setBouquets([]);
+      setFailed(true);
+    } finally {
+      if (request === latestRequest.current) setLoading(false);
+    }
   };
 
   const toggleFav = async (e: React.MouseEvent, id: number) => {
@@ -94,7 +107,6 @@ export default function Catalog() {
     }
   };
 
-  const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, ' ') + ' ₽';
 
   return (
     <div className="pb-6">
@@ -166,7 +178,7 @@ export default function Catalog() {
       <div className="px-5 py-3 flex items-center justify-between"
         style={{ borderBottom: '1px solid var(--ink-line)' }}>
         <span className="caps" style={{ color: 'var(--taupe)' }}>
-          {loading ? 'Загрузка…' : `${bouquets.length} шт`}
+          {loading ? 'Загрузка…' : failed ? 'Нет связи' : `${bouquets.length} шт`}
         </span>
         <select
           value={sort}
@@ -189,6 +201,8 @@ export default function Catalog() {
             </div>
           ))}
         </div>
+      ) : failed ? (
+        <ErrorState title="Каталог не загрузился." onRetry={fetchBouquets} />
       ) : bouquets.length === 0 ? (
         <div className="text-center py-16 px-5">
           <div className="caps mb-3" style={{ color: 'var(--taupe)' }}>✦ Пусто</div>
@@ -200,10 +214,15 @@ export default function Catalog() {
       ) : (
         <div className="grid grid-cols-2 gap-4 px-5 pt-5">
           {bouquets.map((b, i) => (
-            <button
+            <div
               key={b.id}
+              role="button"
+              tabIndex={0}
               onClick={() => navigate(`/bouquet/${b.id}`)}
-              className="w-full text-left"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && e.target === e.currentTarget) navigate(`/bouquet/${b.id}`);
+              }}
+              className="w-full text-left cursor-pointer"
             >
               <div className="relative w-full img-slot border border-ink-line overflow-hidden"
                 style={{ aspectRatio: '4 / 5' }}>
@@ -225,6 +244,12 @@ export default function Catalog() {
                     NEW
                   </span>
                 )}
+                {b.customOrder && (
+                  <span className="absolute bottom-2 left-2 px-1.5 py-0.5"
+                    style={{ background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.2em' }}>
+                    ПОД ЗАКАЗ
+                  </span>
+                )}
                 <button
                   onClick={(e) => toggleFav(e, b.id)}
                   className="absolute bottom-2 right-2 w-8 h-8 flex items-center justify-center"
@@ -244,14 +269,14 @@ export default function Catalog() {
                   <span className="font-mono text-sm" style={{ color: 'var(--ink)' }}>
                     {fmt(b.price)}
                   </span>
-                  {b.oldPrice && b.oldPrice > b.price && (
+                  {b.oldPrice != null && b.oldPrice > b.price && (
                     <span className="font-mono text-xs line-through" style={{ color: 'var(--taupe)' }}>
                       {fmt(b.oldPrice)}
                     </span>
                   )}
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}

@@ -2,14 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Heart, ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import api from '../api/client';
+import { ErrorState } from '../components/ui';
 import { imageUrl } from '../utils/image';
+import { fmt } from '../utils/format';
 import { useCartStore } from '../store/cart';
 import { hapticLight, hapticSuccess } from '../utils/platform';
 
 interface Bouquet {
   id: number; name: string; description: string;
-  price: number; oldPrice?: number; category: string;
+  price: number; oldPrice?: number | null; category: string;
   tags: string[]; isHit: boolean; isNew: boolean;
+  inStock: boolean; customOrder: boolean;
   images: { id: number; url: string }[];
 }
 
@@ -21,6 +24,7 @@ export default function BouquetDetail() {
   const [currentImage, setCurrentImage] = useState(0);
   const [isFav, setIsFav] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<'notFound' | 'failed' | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
@@ -31,16 +35,31 @@ export default function BouquetDetail() {
     isSwiping: boolean;
   }>({ startX: 0, startY: 0, startDist: 0, startScale: 1, startTranslate: { x: 0, y: 0 }, isSwiping: false });
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setLoadError(null);
+    setBouquet(null);
     api.get(`/bouquets/${id}`)
-      .then(({ data }) => { setBouquet(data); setLoading(false); })
-      .catch(() => setLoading(false));
-    api.get('/favorites')
-      .then(({ data }) => {
-        if (data.some((f: any) => f.bouquetId === Number(id))) setIsFav(true);
+      .then(({ data }) => setBouquet(data))
+      .catch((err) => {
+        const status = err?.response?.status;
+        setLoadError(status === 404 || status === 400 ? 'notFound' : 'failed');
       })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    api.get('/favorites')
+      .then(({ data }) => setIsFav(data.some((f: any) => f.bouquetId === Number(id))))
       .catch(() => {});
   }, [id]);
+
+  // Opened by a direct link or from a bot button, there is nothing to go back to
+  const goBack = () => {
+    if (window.history.state?.idx > 0) navigate(-1);
+    else navigate('/catalog');
+  };
 
   const toggleFav = async () => {
     const wasFav = isFav;
@@ -52,7 +71,7 @@ export default function BouquetDetail() {
   };
 
   const handleAddToCart = () => {
-    if (!bouquet) return;
+    if (!bouquet || !(bouquet.inStock || bouquet.customOrder)) return;
     addItem({
       id: `bouquet-${bouquet.id}`,
       bouquetId: bouquet.id,
@@ -65,7 +84,6 @@ export default function BouquetDetail() {
     setTimeout(() => setAdded(false), 1500);
   };
 
-  const fmt = (n: number) => n.toLocaleString('ru-RU').replace(/\s/g, ' ') + ' ₽';
 
   if (loading) {
     return (
@@ -76,6 +94,10 @@ export default function BouquetDetail() {
         />
       </div>
     );
+  }
+
+  if (loadError === 'failed') {
+    return <ErrorState title="Букет не загрузился." onRetry={load} />;
   }
 
   if (!bouquet) {
@@ -95,6 +117,7 @@ export default function BouquetDetail() {
   }
 
   const images = bouquet.images.length > 0 ? bouquet.images : [{ id: 0, url: '' }];
+  const orderable = bouquet.inStock || bouquet.customOrder;
 
   const openFullscreen = () => {
     setScale(1); setTranslate({ x: 0, y: 0 }); setFullscreen(true); hapticLight();
@@ -150,7 +173,7 @@ export default function BouquetDetail() {
       {/* Fullscreen viewer */}
       {fullscreen && (
         <div
-          className="fixed inset-0 z-50 flex flex-col"
+          className="fixed inset-0 z-[70] flex flex-col"
           style={{ background: '#000' }}
         >
           <button
@@ -203,7 +226,7 @@ export default function BouquetDetail() {
         style={{ borderBottom: '1px solid var(--ink-line)' }}
       >
         <button
-          onClick={() => navigate(-1)}
+          onClick={goBack}
           className="w-9 h-9 flex items-center justify-center"
           style={{ border: '1px solid var(--ink-line)' }}
         >
@@ -257,6 +280,24 @@ export default function BouquetDetail() {
               NEW
             </span>
           )}
+          {bouquet.customOrder && (
+            <span
+              className="px-1.5 py-0.5"
+              style={{ background: 'var(--paper)', color: 'var(--ink)',
+                fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.2em' }}
+            >
+              ПОД ЗАКАЗ
+            </span>
+          )}
+          {!orderable && (
+            <span
+              className="px-1.5 py-0.5"
+              style={{ background: 'var(--ink)', color: 'var(--paper)',
+                fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: '0.2em' }}
+            >
+              НЕТ В НАЛИЧИИ
+            </span>
+          )}
         </div>
 
         {images.length > 1 && (
@@ -308,12 +349,23 @@ export default function BouquetDetail() {
 
         <div className="flex items-baseline gap-3 mt-3">
           <span className="font-mono text-xl" style={{ color: 'var(--ink)' }}>{fmt(bouquet.price)}</span>
-          {bouquet.oldPrice && bouquet.oldPrice > bouquet.price && (
+          {bouquet.oldPrice != null && bouquet.oldPrice > bouquet.price && (
             <span className="font-mono text-sm line-through" style={{ color: 'var(--taupe)' }}>
               {fmt(bouquet.oldPrice)}
             </span>
           )}
         </div>
+
+        {bouquet.customOrder && (
+          <p className="text-sm mt-3" style={{ color: 'var(--ink-soft)' }}>
+            Изготавливаем под заказ, срок уточним при подтверждении.
+          </p>
+        )}
+        {!orderable && (
+          <p className="text-sm mt-3" style={{ color: 'var(--vermilion)' }}>
+            Этого букета сейчас нет в наличии. Посмотрите другие в каталоге или позвоните нам.
+          </p>
+        )}
 
         {bouquet.description && (
           <>
@@ -354,15 +406,17 @@ export default function BouquetDetail() {
       >
         <button
           onClick={handleAddToCart}
+          disabled={!orderable}
           className="w-full py-4 flex items-center justify-center gap-2"
           style={{
-            background: added ? 'var(--ink)' : 'var(--vermilion)',
+            background: !orderable ? 'var(--taupe)' : added ? 'var(--ink)' : 'var(--vermilion)',
             color: 'var(--paper)',
             fontFamily: 'var(--mono)', fontSize: 11,
             letterSpacing: '0.22em', textTransform: 'uppercase',
+            opacity: orderable ? 1 : 0.6,
           }}
         >
-          {added ? '✓ Добавлено' : `В корзину · ${fmt(bouquet.price)}`}
+          {!orderable ? 'Нет в наличии' : added ? '✓ Добавлено' : `В корзину · ${fmt(bouquet.price)}`}
         </button>
       </div>
     </div>
