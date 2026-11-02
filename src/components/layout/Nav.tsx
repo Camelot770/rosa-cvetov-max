@@ -1,11 +1,15 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, ShoppingBag, Heart, User } from 'lucide-react';
 import { useCartStore } from '../../store/cart';
+import { useKeyboardOpen } from '../../hooks/useKeyboardOpen';
 
 export default function Nav() {
   const navigate = useNavigate();
   const location = useLocation();
   const totalItems = useCartStore((s) => s.totalItems());
+  const keyboardOpen = useKeyboardOpen(location.pathname);
+
+  if (keyboardOpen) return null;
 
   const tabs = [
     { path: '/',           icon: Home,        label: 'Главная' },

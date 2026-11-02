@@ -1,4 +1,4 @@
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useUserStore } from './store/user';
 import { initWebApp } from './utils/platform';
@@ -9,6 +9,7 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Profile from './pages/Profile';
 import Orders from './pages/Orders';
+import Paid from './pages/Paid';
 import Favorites from './pages/Favorites';
 import About from './pages/About';
 import Contact from './pages/Contact';
@@ -18,10 +19,10 @@ import ScrollProgress from './components/layout/ScrollProgress';
 function App() {
   const fetchProfile = useUserStore((s) => s.fetchProfile);
   const navigate = useNavigate();
+  const isPaidPage = useLocation().pathname === '/paid';
 
   useEffect(() => {
     initWebApp();
-    fetchProfile();
 
     // Handle ?page= query param from Max bot open_app buttons
     // (Max API only allows the exact registered base URL, so we pass route via ?page=)
@@ -31,6 +32,19 @@ function App() {
       navigate(`/${page}`, { replace: true });
     }
   }, []);
+
+  useEffect(() => {
+    if (!isPaidPage) fetchProfile();
+  }, [isPaidPage]);
+
+  // YooKassa returns here, usually in an external browser: no messenger session, no app shell
+  if (isPaidPage) {
+    return (
+      <div className="min-h-screen bg-paper text-ink">
+        <Paid />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-24 bg-paper text-ink">
@@ -46,6 +60,7 @@ function App() {
         <Route path="/favorites" element={<Favorites />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Nav />
     </div>
