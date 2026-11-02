@@ -37,9 +37,23 @@ export default function Home() {
     api.get('/bouquets').then((res) => {
       const list: Bouquet[] = res.data || [];
       setTotalCount(list.length);
-      // Featured = наиболее дорогой букет = «обложечный»
-      const sorted = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
-      setFeatured(sorted[0] || null);
+
+      // 1) Явно выбранный в админке featured букет
+      // 2) fallback — самый дорогой
+      api.get('/bouquets', { params: { featured: true } })
+        .then((fRes) => {
+          const feat: Bouquet[] = fRes.data || [];
+          if (feat.length > 0) {
+            setFeatured(feat[0]);
+          } else {
+            const sorted = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
+            setFeatured(sorted[0] || null);
+          }
+        })
+        .catch(() => {
+          const sorted = [...list].sort((a, b) => (b.price || 0) - (a.price || 0));
+          setFeatured(sorted[0] || null);
+        });
     }).catch(() => {});
 
     api.get('/bouquets', { params: { isHit: true } })
