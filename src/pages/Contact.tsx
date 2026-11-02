@@ -1,12 +1,18 @@
 import { useState } from 'react';
-import { Send, CheckCircle, MessageCircle } from 'lucide-react';
+import { Phone } from 'lucide-react';
 import api from '../api/client';
+import { PageHead, ctaStyle } from '../components/ui';
+import { useSettings, DEFAULT_PHONE } from '../hooks/useSettings';
+import { apiErrorMessage, phoneHref, phoneLabel } from '../utils/format';
 
 export default function Contact() {
+  const settings = useSettings();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+
+  const phone = settings.phone || DEFAULT_PHONE;
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -17,8 +23,8 @@ export default function Contact() {
       await api.post('/contact', { message: message.trim() });
       setSent(true);
       setMessage('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Не удалось отправить сообщение');
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Не удалось отправить сообщение'));
     } finally {
       setSending(false);
     }
@@ -26,16 +32,14 @@ export default function Contact() {
 
   if (sent) {
     return (
-      <div className="pb-4">
-        <div className="bg-gradient-to-r from-pink-400 to-pink-500 text-white px-4 py-10 text-center">
-          <CheckCircle size={48} className="mx-auto mb-3" />
-          <h1 className="text-xl font-bold">Сообщение отправлено!</h1>
-          <p className="text-pink-100 mt-1">Мы ответим в ближайшее время</p>
-        </div>
-        <div className="px-4 py-4">
+      <div className="pb-6">
+        <PageHead kicker={<>P.&nbsp;10 — Contact</>}>Сообщение <em>отправлено.</em></PageHead>
+        <div className="px-5 pt-5">
+          <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>Мы ответим в ближайшее время.</p>
           <button
             onClick={() => setSent(false)}
-            className="w-full bg-primary text-white py-3.5 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+            className="mt-6 w-full py-4 flex items-center justify-center gap-2"
+            style={ctaStyle('var(--ink)')}
           >
             Написать ещё
           </button>
@@ -44,42 +48,62 @@ export default function Contact() {
     );
   }
 
-  return (
-    <div className="pb-4">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-pink-400 to-pink-500 text-white px-4 py-8 text-center">
-        <MessageCircle size={40} className="mx-auto mb-3" />
-        <h1 className="text-2xl font-bold">Написать нам</h1>
-        <p className="text-pink-100 mt-1">Мы ответим вам в Max</p>
-      </div>
+  const canSend = !sending && !!message.trim();
 
-      <div className="px-4 py-4 space-y-4">
-        <div className="bg-white rounded-xl p-4 shadow-sm">
-          <textarea
-            placeholder="Ваше сообщение..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            maxLength={2000}
-            rows={5}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-          />
-          <p className="text-xs font-medium text-gray-600 mt-1 text-right">
-            {message.length}/2000
-          </p>
-        </div>
+  return (
+    <div className="pb-6">
+      <PageHead kicker={<>P.&nbsp;10 — Contact</>}>Написать <em>нам.</em></PageHead>
+
+      <div className="px-5 pt-5">
+        <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>Мы ответим вам в Max</p>
+
+        <textarea
+          placeholder="Ваше сообщение…"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          maxLength={2000}
+          rows={6}
+          className="mt-4"
+          style={{
+            background: 'var(--paper-2)',
+            border: '1px solid var(--ink-line)',
+            fontFamily: 'var(--body)',
+            fontSize: 14,
+            color: 'var(--ink)',
+            outline: 'none',
+            width: '100%',
+            padding: '12px 14px',
+            resize: 'none',
+          }}
+        />
+        <p className="caps mt-1 text-right" style={{ color: 'var(--taupe)' }}>{message.length}/2000</p>
 
         {error && (
-          <p className="text-sm text-red-500 px-1">{error}</p>
+          <p className="text-sm mt-3 px-3 py-2" style={{ background: 'var(--vermilion)', color: 'var(--paper)' }}>
+            {error}
+          </p>
         )}
 
         <button
           onClick={handleSend}
-          disabled={sending || !message.trim()}
-          className="w-full bg-primary text-white py-3.5 rounded-xl font-semibold active:scale-[0.98] transition-transform disabled:opacity-50 flex items-center justify-center gap-2"
+          disabled={!canSend}
+          className="mt-4 w-full py-4 flex items-center justify-center gap-2"
+          style={{ ...ctaStyle(canSend ? 'var(--vermilion)' : 'var(--taupe)'), opacity: canSend ? 1 : 0.6 }}
         >
-          <Send size={18} />
-          {sending ? 'Отправка...' : 'Отправить'}
+          {sending ? 'Отправляем…' : 'Отправить'}
         </button>
+
+        <a
+          href={phoneHref(phone)}
+          className="flex items-center gap-3 py-3 mt-6"
+          style={{ borderTop: '1px solid var(--ink-line)', borderBottom: '1px solid var(--ink-line)' }}
+        >
+          <Phone size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} />
+          <div className="flex-1">
+            <div className="font-mono text-sm">{phoneLabel(phone)}</div>
+            <div className="caps mt-1" style={{ color: 'var(--taupe)' }}>Или позвоните нам</div>
+          </div>
+        </a>
       </div>
     </div>
   );

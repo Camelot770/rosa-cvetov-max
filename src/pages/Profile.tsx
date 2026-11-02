@@ -1,138 +1,184 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Heart, Star, MapPin, Phone, Info, MessageCircle } from 'lucide-react';
+import { Package, Heart, Info, MessageCircle, ArrowRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import api from '../api/client';
 import { useUserStore } from '../store/user';
+import { useSettings } from '../hooks/useSettings';
+import { PageHead, Spinner, ErrorState } from '../components/ui';
+import { apiErrorMessage } from '../utils/format';
+
+function MenuRow({
+  icon: Icon,
+  title,
+  meta,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  meta: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 py-4 text-left"
+      style={{ borderBottom: '1px solid var(--ink-line)' }}
+    >
+      <Icon size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} className="flex-shrink-0" />
+      <span className="flex-1">
+        <span className="font-display block" style={{ fontSize: 20, lineHeight: 1.1 }}>{title}</span>
+        <span className="caps block mt-1" style={{ color: 'var(--taupe)' }}>{meta}</span>
+      </span>
+      <ArrowRight size={16} strokeWidth={1.5} style={{ color: 'var(--vermilion)' }} />
+    </button>
+  );
+}
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user, loading, fetchProfile } = useUserStore();
+  const { user, fetchProfile } = useUserStore();
+  const settings = useSettings();
+  const [attempted, setAttempted] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
+  const load = () => {
+    setAttempted(false);
+    fetchProfile().finally(() => setAttempted(true));
+  };
 
-  if (loading) {
+  useEffect(load, []);
+
+  const deleteAddress = async (id: number) => {
+    setDeletingId(id);
+    setDeleteError('');
+    try {
+      await api.delete(`/user/address/${id}`);
+      useUserStore.setState((state) => (
+        state.user
+          ? { user: { ...state.user, addresses: state.user.addresses.filter((a) => a.id !== id) } }
+          : state
+      ));
+    } catch (err) {
+      setDeleteError(apiErrorMessage(err, 'Не удалось удалить адрес. Попробуйте ещё раз.'));
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
+
+  const menu = (
+    <div className="px-5 mt-5" style={{ borderTop: '1px solid var(--ink-line)' }}>
+      <MenuRow icon={Package} title="Мои заказы" meta="История и оплата" onClick={() => navigate('/orders')} />
+      <MenuRow icon={Heart} title="Избранное" meta="Понравившиеся букеты" onClick={() => navigate('/favorites')} />
+      <MenuRow icon={Info} title="О студии" meta="Контакты и доставка" onClick={() => navigate('/about')} />
+      <MenuRow icon={MessageCircle} title="Написать нам" meta="Задайте вопрос" onClick={() => navigate('/contact')} />
+    </div>
+  );
+
+  if (!user && !attempted) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="pb-6">
+        <PageHead kicker={<>P.&nbsp;08 — Profile</>}>Ваш <em>профиль.</em></PageHead>
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="pb-6">
+        <PageHead kicker={<>P.&nbsp;08 — Profile</>}>Ваш <em>профиль.</em></PageHead>
+        <ErrorState
+          title="Профиль не загрузился."
+          message="Проверьте интернет и попробуйте ещё раз. Если не помогло, перезапустите приложение."
+          onRetry={load}
+        />
+        {menu}
       </div>
     );
   }
 
   return (
-    <div className="pb-4">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-pink-400 to-pink-500 text-white px-4 py-6">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-2xl">
-            {user?.firstName?.[0] || '🌹'}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold">
-              {user?.firstName} {user?.lastName || ''}
-            </h1>
-            {user?.username && <p className="text-pink-100">@{user.username}</p>}
-          </div>
-        </div>
+    <div className="pb-6">
+      <PageHead kicker={<>P.&nbsp;08 — Profile</>}>
+        {user.firstName ? <>Здравствуйте, <em>{user.firstName}.</em></> : <>Ваш <em>профиль.</em></>}
+      </PageHead>
 
-        {/* Bonus card */}
-        <div className="mt-4 bg-white/15 backdrop-blur rounded-xl p-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-pink-100 text-sm">Бонусные баллы</p>
-              <p className="text-3xl font-bold">{user?.bonusPoints || 0}</p>
-            </div>
-            <Star size={32} className="text-yellow-300" />
-          </div>
-          <p className="text-pink-100 text-xs mt-2">
-            5% кэшбэк с каждого заказа
-          </p>
+      {/* Bonus */}
+      <div
+        className="mx-5 mt-5 px-4 py-4"
+        style={{ background: 'var(--paper-2)', border: '1px solid var(--ink-line)' }}
+      >
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="caps" style={{ color: 'var(--vermilion)' }}>✦ Бонусы</span>
+          <span className="disp" style={{ fontSize: 32 }}>{user.bonusPoints || 0}</span>
         </div>
+        <p className="text-sm mt-1" style={{ color: 'var(--ink-soft)' }}>
+          {settings.bonus_percent || '5'}% кэшбэк с каждого заказа. 1 бонус = 1 рубль.
+        </p>
       </div>
 
-      {/* Menu */}
-      <div className="px-4 py-4 space-y-2">
-        <button
-          onClick={() => navigate('/orders')}
-          className="w-full flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm"
-        >
-          <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-            <Package size={20} className="text-blue-500" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="font-bold text-gray-900">Мои заказы</p>
-            <p className="text-xs font-medium text-gray-700">История заказов</p>
-          </div>
-        </button>
+      {menu}
 
-        <button
-          onClick={() => navigate('/favorites')}
-          className="w-full flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm"
-        >
-          <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-            <Heart size={20} className="text-red-500" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="font-bold text-gray-900">Избранное</p>
-            <p className="text-xs font-medium text-gray-700">Понравившиеся букеты</p>
-          </div>
-        </button>
+      {user.phone && (
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--ink-line)' }}>
+          <div className="caps" style={{ color: 'var(--taupe)' }}>Ваш телефон</div>
+          <div className="font-mono text-sm mt-1">{user.phone}</div>
+        </div>
+      )}
 
-        <button
-          onClick={() => navigate('/about')}
-          className="w-full flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm"
-        >
-          <div className="w-10 h-10 bg-pink-50 rounded-lg flex items-center justify-center">
-            <Info size={20} className="text-primary" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="font-bold text-gray-900">О студии</p>
-            <p className="text-xs font-medium text-gray-700">Контакты и информация</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => navigate('/contact')}
-          className="w-full flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm"
-        >
-          <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-            <MessageCircle size={20} className="text-purple-500" />
-          </div>
-          <div className="text-left flex-1">
-            <p className="font-bold text-gray-900">Написать нам</p>
-            <p className="text-xs font-medium text-gray-700">Задайте вопрос</p>
-          </div>
-        </button>
-
-        {/* Phone */}
-        {user?.phone && (
-          <div className="flex items-center gap-3 bg-white rounded-xl p-4 shadow-sm">
-            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-              <Phone size={20} className="text-green-500" />
-            </div>
-            <div className="text-left flex-1">
-              <p className="font-bold text-gray-900">{user.phone}</p>
-              <p className="text-xs font-medium text-gray-700">Ваш телефон</p>
-            </div>
-          </div>
-        )}
-
-        {/* Addresses */}
-        {user?.addresses && user.addresses.length > 0 && (
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-2">
-              <MapPin size={16} className="text-primary" />
-              Адреса
-            </h3>
-            {user.addresses.map((a: any) => (
-              <div key={a.id} className="text-sm text-gray-800 py-1.5 border-t first:border-0">
-                <span className="font-semibold">{a.title}:</span> {a.street}, {a.house}
+      {user.addresses?.length > 0 && (
+        <section className="px-5 pt-6">
+          <div className="caps mb-2" style={{ color: 'var(--vermilion)' }}>✦ Адреса</div>
+          {deleteError && (
+            <p className="text-sm mb-2 px-3 py-2" style={{ background: 'var(--vermilion)', color: 'var(--paper)' }}>
+              {deleteError}
+            </p>
+          )}
+          {user.addresses.map((a: any) => (
+            <div
+              key={a.id}
+              className="flex items-baseline justify-between gap-3 py-3"
+              style={{ borderBottom: '1px solid var(--ink-line)' }}
+            >
+              <span className="text-sm">
+                {a.street}, {a.house}
                 {a.apartment ? `, кв. ${a.apartment}` : ''}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              </span>
+              {confirmDeleteId === a.id ? (
+                <span className="flex items-center gap-3 flex-shrink-0">
+                  <button
+                    onClick={() => deleteAddress(a.id)}
+                    disabled={deletingId === a.id}
+                    className="caps underline underline-offset-4"
+                    style={{ color: 'var(--vermilion)' }}
+                  >
+                    {deletingId === a.id ? 'Удаляем…' : 'Удалить'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="caps underline underline-offset-4"
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    Нет
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={() => setConfirmDeleteId(a.id)}
+                  className="caps underline underline-offset-4 flex-shrink-0"
+                  style={{ color: 'var(--taupe)' }}
+                >
+                  Убрать
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
