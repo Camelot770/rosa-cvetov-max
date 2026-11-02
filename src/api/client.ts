@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://roza-cvetov-camelot770.
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },

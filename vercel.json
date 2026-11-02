@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/uploads/:path*", "destination": "https://rosa-cvetov-camelot770.amvera.io/uploads/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://roza-cvetov-camelot770.msk1.amvera.tech/uploads/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
