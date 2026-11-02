@@ -10,6 +10,7 @@ interface User {
   username?: string;
   phone?: string;
   bonusPoints: number;
+  promoAvailable?: boolean;
   addresses: any[];
 }
 

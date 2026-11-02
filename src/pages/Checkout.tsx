@@ -156,7 +156,8 @@ export default function Checkout() {
 
   // Same order of calculation as on the server: promo first, the bonus cap counts from what's left
   const subtotal      = totalPrice();
-  const promoValid    = promoCode.trim().toUpperCase() === PROMO_CODE;
+  const promoEntered  = promoCode.trim().toUpperCase() === PROMO_CODE;
+  const promoValid    = promoEntered && user?.promoAvailable !== false;
   const promoDiscount = promoValid ? Math.floor(subtotal * PROMO_SHARE) : 0;
   const discounted    = subtotal - promoDiscount;
   const deliveryCost  = deliveryType === 'delivery' && subtotal < freeFrom ? deliveryPrice : 0;
@@ -453,6 +454,8 @@ export default function Checkout() {
             <p className="caps mt-2" style={{ color: 'var(--vermilion)' }}>
               Скидка {PROMO_SHARE * 100}% применена
             </p>
+          ) : promoEntered ? (
+            <p className="caps mt-2" style={{ color: 'var(--taupe)' }}>Промокод действует только на первый заказ</p>
           ) : promoTouched && promoCode.trim() ? (
             <p className="caps mt-2" style={{ color: 'var(--taupe)' }}>Такого промокода нет</p>
           ) : null}
